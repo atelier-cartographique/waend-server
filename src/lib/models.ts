@@ -6,7 +6,7 @@
  * License in LICENSE file at the root of the repository.
  */
 
-import uuid from 'uuid';
+import * as uuid from 'uuid';
 // import { Maybe } from 'monet';
 // import wellknown from 'wellknown';
 
@@ -27,7 +27,7 @@ export interface ModelData extends BaseModelData {
 
 
 
-export class Model {
+export class Record {
     parse = JSON.parse;
     stringify = JSON.stringify;
 
@@ -52,7 +52,7 @@ export class Model {
     }
 
 
-    buildFromPersistent(row): ModelData {
+    buildFromPersistent(row: any): ModelData {
         const p = this.parameters;
         const initial: ModelData = {
             properties: {},
@@ -72,31 +72,31 @@ export class Model {
 }
 
 
-export class Entity extends Model {
+export class Entity extends Record {
     parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
 }
 
-export class Path extends Model {
+export class Path extends Record {
     parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
 }
 
-export class Spread extends Model {
+export class Spread extends Record {
     parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
 }
 
-export class Layer extends Model {
+export class Layer extends Record {
     parameters = ['id', 'user_id', 'properties'];
 }
 
-export class User extends Model {
+export class User extends Record {
     parameters = ['id', 'auth_id', 'properties'];
 }
 
-export class Composition extends Model {
+export class Composition extends Record {
     parameters = ['id', 'layer_id', 'group_id'];
 }
 
-export class Group extends Model {
+export class Group extends Record {
     parameters = ['id', 'user_id', 'status_flag', 'properties'];
 }
 
