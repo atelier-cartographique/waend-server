@@ -7,163 +7,135 @@
  */
 
 
+import * as debug from 'debug';
+import * as Promise from 'bluebird';
+import * as solr from 'solr-client';
+import { ModelData } from './models';
 
-var logger = require('debug')('lib/indexer'),
-    _ = require('underscore'),
-    Promise = require('bluebird'),
-    solr = require('solr-client');
+const logger = debug('waend:indexer');
 
 
+type IndexerUpdate = (a: string, b: string[], c: ModelData) => Promise<void>;
+type IndexerUpdateBatch = (a: string, b: string[], c: ModelData[]) => Promise<void>;
+type IndexerSearch = (a: string) => Promise<any>;
 
-function Indexer (solrClient) {
-    this.client = solrClient;
+export interface IIndexer {
+    update: IndexerUpdate;
+    updateBatch: IndexerUpdateBatch;
+    search: IndexerSearch;
 }
 
-Indexer.prototype.update = function (type, groups, model) {
-    var client = this.client,
-        props = model.properties,
-        content = [];
 
-    _.each(props, function(v, k){
-        if (_.isString(v)) {
-            content.push(k);
-            content.push(v);
-        }
-    });
+const Indexer: (a: solr.Client) => IIndexer =
+    (client) => {
 
-    var doc = {
-        id: model.id,
-        type: type,
-        groups: groups || [],
-        name: props.name || props.id,
-        description: props.description || '',
-        content: content.join('\n').toLowerCase()
-    };
-
-    var resolver = function (resolve, reject) {
-        client.add([doc], function(err){
-            if (err) {
-                console.error(err);
-                reject(err);
-            }
-            else {
-                client.commit();
-                resolve();
-            }
-        });
-    };
-
-    return (new Promise(resolver));
-};
-
-Indexer.prototype.updateBatch = function (type, groups, models) {
-    var client = this.client,
-        docs = [];
-
-    var content;
-    var makeContent = function(v, k){
-        if (_.isString(v)) {
-            content.push(k);
-            content.push(v);
-        }
-    };
-    // logger('indexer.batch', models.length, groups.length);
-    for (var i = 0; i < models.length; i++) {
-        var model = models[i],
-            gids = groups[i],
-            props = model.properties;
-
-        content = [];
-        _.each(props, makeContent);
-
-        var doc = {
-            id: model.id,
-            type: type,
-            groups: gids || [],
-            name: props.name || props.id,
-            description: props.description || '',
-            content: content.join('\n').toLowerCase()
+        const update: IndexerUpdate = (type, groups, model) => {
+            return updateBatch(type, groups, [model]);
         };
 
-        docs.push(doc);
-    }
-    if (docs.length > 0) {
+        const updateBatch: IndexerUpdateBatch =
+            (type, groups, models) => {
+                const docs = models.map((model) => ({
+                    id: model.id,
+                    type: type,
+                    groups: groups || [],
+                    properties: model.properties
+                }));
 
-        var resolver = function (resolve, reject) {
-            client.add(docs, function(err){
-                if (err) {
-                    console.error(err);
-                    reject(err);
+                if (docs.length > 0) {
+
+                    const resolver: (a: () => void, b: (c: Error) => void) => void =
+                        (resolve, reject) => {
+                            client.add(docs, function(err) {
+                                if (err) {
+                                    logger(err);
+                                    return reject(err);
+                                }
+                                client.commit();
+                                resolve();
+
+                            });
+                        };
+
+                    return (new Promise<void>(resolver));
                 }
-                else {
-                    client.commit();
-                    resolve();
-                }
-            });
-        };
-
-        return (new Promise(resolver));
-    }
-    return Promise.resolve();
-};
+                return Promise.resolve();
+            };
 
 
-Indexer.prototype.search = function (term) {
-    var client = this.client;
+        const search: IndexerSearch =
+            (term) => {
+                const query = client.createQuery()
+                    .q(term.toLowerCase())
+                    .mm(1)
+                    .qf({ name: 5, description: 3, content: 1 })
+                    .edismax()
+                    .start(0)
+                    .rows(32 * 24);
 
-    var query = client.createQuery()
-                      .q(term.toLowerCase())
-                      .mm(1)
-                      .qf({name: 5, description: 3, content: 1})
-                      .edismax()
-                      .start(0)
-                      .rows(32 * 24);
+                const resolver: (a: (d: any) => void, b: (c: Error) => void) => void =
+                    (resolve, reject) => {
+                        client.search(query, function(err, obj) {
+                            if (err) {
+                                reject(err);
+                            }
+                            else {
+                                resolve(obj);
+                            }
+                        });
+                    };
 
-    var resolver = function (resolve, reject) {
-        client.search(query, function(err, obj){
-            if(err){
-                reject(err);
-            }
-            else {
-                resolve(obj);
-            }
-        });
+                return (new Promise(resolver));
+            };
+
+        return { update, updateBatch, search };
     };
 
-    return (new Promise(resolver));
-};
 
 
-function NullIndexer () {
-    this.update = _.noop;
-    this.search = function () {
-        return Promise.resolve({});
-    };
-}
+const NullIndexer: () => IIndexer =
+    () => {
+        return {
+            update() {
+                return Promise.resolve();
+            },
 
-var indexer;
+            updateBatch() {
+                return Promise.resolve();
+            },
 
-module.exports.configure = function (config) {
+            search() {
+                return Promise.resolve({});
+            }
+        }
+    }
+
+let indexer: IIndexer;
+
+export const configure = (config?: any) => {
     if (indexer) {
-        throw (new Error('Indexer Already Configured'));
+        return
     }
+
     if (config) {
         var solrClient = solr.createClient(
             config.host, config.port, config.collection
         );
         solrClient.autoCommit = true;
 
-        indexer = new Indexer(solrClient);
+        indexer = Indexer(solrClient);
     }
     else {
-        indexer = new NullIndexer();
+        indexer = NullIndexer();
     }
 };
 
 
-module.exports.client = function () {
+export const client = () => {
     if (!indexer) {
         throw (new Error('Indexer Not Configured'));
     }
     return indexer;
 };
+
+logger('module loaded');

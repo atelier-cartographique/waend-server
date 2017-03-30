@@ -14,8 +14,8 @@ import * as debug from 'debug';
 
 import { configure as configureDB } from './lib/db';
 import { configure as configureStore } from './lib/store';
+import indexer from './lib/indexer';
 // import cache from './lib/cache';
-// import indexer from './lib/indexer';
 // import notifier from './lib/notifier';
 // import server from './lib/server';
 // import routes from './routes';
