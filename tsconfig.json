@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        // "project": "src",
+        "outDir": "js",
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "target": "es6",
+        "alwaysStrict": true,
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noImplicitUseStrict": false,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "strictNullChecks": true,
+        "removeComments": true,
+        "sourceMap": false
+    },
+    "files": [
+        "src/index.ts"
+    ]
+}
