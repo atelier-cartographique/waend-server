@@ -1,5 +1,5 @@
 /**
- lib/cache.js
+ lib/cache.ts
 
  * Copyright (C) 2015  Pierre Marchand <pierremarc07@gmail.com>
  *
@@ -13,85 +13,88 @@
 
 */
 
-var logger = require('debug')('lib/cache'),
-    _ = require('underscore'),
-    Promise = require('bluebird'),
-    Database = require('./db'),
-    Store = require('./store'),
-    Indexer = require('./indexer'),
-    Types = require('./models');
+import * as debug from 'debug';
+import * as Promise from 'bluebird';
+import { client as persistentClient } from './db';
+import { client as kvClient } from './store';
+import { client as indexerClient } from './indexer';
+import { Record, RecordType, record, ModelData, BaseModelData } from './models';
+import { QueryResult } from "pg";
 
-var kvClient,
-    persistentClient,
-    indexerClient,
-    cacheInstance;
+const logger = debug('waend:cache');
 
-
-function getFromPersistent (objType, id) {
-    var queryName = objType + 'Get',
-        typeHandler = Types[objType],
-        params = [id];
-
-    var resolver = function (resolve, reject) {
-        persistentClient.query(queryName, params)
-            .then(function(results){
-                if (results && results.length > 0) {
-                    var obj = typeHandler.buildFromPersistent(results[0]);
-                    resolve(obj);
-                }
-                else {
-                    reject(new Error('NotFound'));
-                }
-            })
-            .catch(reject);
+const logError =
+    (name: string) => (err: Error) => {
+        logger(`:error [${name}]: ${err}`);
     };
 
-    return (new Promise(resolver));
-}
+type ModelDataResolveFn = (a: ModelData) => void;
+type ModelDataListResolveFn = (a: ModelData[]) => void;
+type RejectFn = (a: Error) => void;
 
-function queryPersistent (queryName, objType, params) {
-    var typeHandler = Types[objType];
+const getFromPersistent: (a: RecordType, b: string) => Promise<ModelData> =
+    (objType, id) => {
+        const queryName = objType + 'Get',
+            typeHandler = record(objType),
+            params = [id];
 
-    params = params || [];
+        const resolver: (a: ModelDataResolveFn, b: RejectFn) => void =
+            (resolve, reject) => {
+                persistentClient()
+                    .query(queryName, params)
+                    .then((result) => {
+                        if (result.rowCount > 0) {
+                            const obj = typeHandler.buildFromPersistent(result.rows[0]);
+                            resolve(obj);
+                        }
+                        else {
+                            reject(new Error('NotFound'));
+                        }
+                    })
+                    .catch(reject);
+            };
 
-    var resolver = function (resolve, reject) {
-        persistentClient.query(queryName, params)
-            .then(function(results){
-                if (results) {
-                    var objs = [];
-                    for (var i = 0; i < results.length; i++) {
-                        var obj = typeHandler.buildFromPersistent(results[i]);
-                        objs.push(obj);
-                    }
-                    resolve(objs);
-                }
-                else {
-                    reject(new Error('EmptyResultSet'));
-                }
-            })
-            .catch(reject);
-    };
+        return (new Promise(resolver));
+    }
 
-    return (new Promise(resolver));
-}
+const queryPersistent: (a: string, b: RecordType, c: any[]) => Promise<ModelData[]> =
+    (queryName, objType, params = []) => {
+        const typeHandler = record(objType);
 
+        const resolver: (a: ModelDataListResolveFn, b: RejectFn) => void =
+            (resolve, reject) => {
+                persistentClient()
+                    .query(queryName, params)
+                    .then((result) => {
+                        if (result.rowCount > 0) {
+                            resolve(
+                                result.rows.map((row) => typeHandler.buildFromPersistent(row)));
+                        }
+                        else {
+                            reject(new Error('EmptyResultSet'));
+                        }
+                    })
+                    .catch(reject);
+            };
 
-
-function saveToPersistent (objType, obj) {
-    var op = ('id' in obj) ? 'Update' : 'Create',
-        queryName = objType + op,
-        prepObj = Types[objType].prepare(obj),
-        params = Types[objType].getParameters(prepObj);
-
-    return persistentClient.query(queryName, params);
-}
+        return (new Promise(resolver));
+    }
 
 
-function logError(name) {
-    return function (err) {
-        console.error(name, err);
-    };
-}
+
+const saveToPersistent: (a: RecordType, b: (ModelData | BaseModelData)) => Promise<QueryResult> =
+    (objType, obj) => {
+        const op = ('id' in obj) ? 'Update' : 'Create';
+        const recName = RecordType[objType];
+        const queryName = recName + op;
+        const rec = record(objType);
+        const prepObj = rec.prepare(obj);
+        const params = rec.getParameters(prepObj);
+
+        return persistentClient().query(queryName, params);
+    }
+
+
 
 
 
@@ -101,273 +104,278 @@ function logError(name) {
  * @method CacheItem
  * @param  {string}  mapId A map uuid
  */
-function CacheItem (mapId) {
-    this.id = mapId;
-    this.created = Date.now();
-    this.reloadTimeoutID = null;
-    this.isActive = false;
-    this.data = null;
-    this.deps = [];
-    this.dirty = true;
+
+interface CacheItem {
+    id: string;
+    created: number;
+    reloadTimeoutID: null | number;
+    isActive: boolean;
+    data: any;
+    deps: string[];
+    dirty: boolean;
 }
+
+const cacheItem: (a: string) => CacheItem =
+    (mapId) => {
+        return {
+            id: mapId,
+            created: Date.now(),
+            reloadTimeoutID: null,
+            isActive: false,
+            data: null,
+            deps: [],
+            dirty: true,
+        }
+    }
 
 
 /**
  * updates a record on the KV store
- * @method updateRecord
- * @param  {object}     group A full data object for a group
- * @return {Promise}           query to KV store
  */
-CacheItem.prototype.updateRecord = function () {
-    var objString = JSON.stringify(this.data),
-        layers = this.data.group.layers,
-        that = this;
-    this.deps = [];
-    for (var i = 0; i < layers.length; i++) {
-        this.deps.push(layers[i].id);
-    }
-    return kvClient.put(this.id, objString)
-            .then(function(){
-                // logger('Item Stored');
-                that.data = null;
-                that.markClean();
+const updateRecord: (a: CacheItem) => Promise<void> =
+    (item) => {
+        const objString = JSON.stringify(item.data);
+        item.deps = item.data.group.layers.map((layer) => layer.id);
+
+        return kvClient().put(item.id, objString)
+            .then(() => {
+                markClean(item);
             })
             .catch(logError('CacheItem.updateRecord'));
+    };
+
+
+const getFeatures = (groupData: ModelData) => (lyr: ModelData) => {
+    const layerId: string = lyr.id;
+    const queries: Promise<QueryResult>[] = [];
+    const records: Record[] = [];
+    const features: ModelData[] = [];
+    const types = [RecordType.Entity, RecordType.Path, RecordType.Spread];
+
+    types.forEach((t) => {
+        const tName = RecordType[t];
+        queries.push(
+            persistentClient().query(`${tName}GetLayer`, [layerId]));
+        records.push(record(t));
+    });
+
+    const mapper = (result: QueryResult, index: number) => {
+        const rec = records[index];
+        result.rows.forEach((row) => {
+            features.push(rec.buildFromPersistent(row));
+        });
+    };
+
+    return Promise.map(queries, mapper)
+        .then(() => {
+            lyr.features = features;
+            groupData.group.layers.push(lyr);
+        });
+
 };
+
+
+
+const getCompositions = (item: CacheItem, groupData: ModelData) => (result: QueryResult) => {
+    if (result.rowCount > 0) {
+        return (
+            Promise
+                .map(result.rows, (composition) =>
+                    getFromPersistent(RecordType.Layer, composition.layer_id))
+                .map(getFeatures(groupData))
+                .then(() => { updateRecord(item); }));
+    }
+    return updateRecord(item);
+}
 
 /**
  * load data from persistent storage and insert it in a kv store
  * @method load
  * @return {CacheItem} itself
  */
-CacheItem.prototype.loadFromPersistent = function () {
-    this.data = {};
-    this.dirty = true;
-    var groupId = this.id,
-        groupData = this.data;
+const loadItem: (a: CacheItem) => Promise<void> =
+    (item) => {
+        item.data = {};
+        item.dirty = true;
 
-    function endMethod () {
-        return this.updateRecord();
-    }
-
-    var end = endMethod.bind(this);
-
-    function getFeatures (lyr) {
-        // logger('getFeatures');
-        var layerId = lyr.id,
-            queries = [], models = [],
-            features = [];
-
-        _.each(['entity', 'path', 'spread'], function(t){
-            queries.push(persistentClient.query(t + 'GetLayer', [layerId]));
-            models.push(Types[t]);
-        });
-
-        var mapper = function(results, index){
-            if (results) {
-                var model = models[index];
-                for (var i = 0; i < results.length; i++) {
-                    features.push(model.buildFromPersistent(results[i]));
-                }
-            }
-        };
-
-        return Promise.map(queries, mapper)
-                    .then(function(){
-                        lyr.features = features;
-                        groupData.group.layers.push(lyr);
-                    });
-
-    }
-
-    function getLayer (composition) {
-        // logger('getLayer');
-        var layerId = composition.layer_id;
-        return getFromPersistent('layer', layerId);
-    }
-
-    function getCompositions (results) {
-        // logger('getCompositions', results);
-        if (results && results.length > 0) {
-            return Promise.map(results, getLayer)
-                          .map(getFeatures)
-                          .then(end);
+        const getGroup = (group: ModelData) => {
+            item.data.group = group;
+            item.data.group.layers = [];
+            return (
+                persistentClient()
+                    .query('compositionGetForGroup', [item.id])
+                    .catch(logError('CacheItem.load.getGroup')));
         }
-        return end();
-    }
 
-    function getGroup (group) {
-        // logger('getGroup');
-        groupData.group = group;
-        groupData.group.layers = [];
-        return persistentClient.query('compositionGetForGroup', [groupId])
-                .then(getCompositions)
-                .catch(logError('CacheItem.load.getGroup'));
-    }
-
-    return getFromPersistent('group', groupId)
-            .then(getGroup)
-            .catch(logError('CacheItem.load'));
-};
+        return (
+            getFromPersistent(RecordType.Group, item.id)
+                .then(getGroup)
+                .then(getCompositions(item, item.data))
+                .catch(logError('CacheItem.load')));
+    };
 
 /**
  * get the data out of the KV store
- * @method toJSON
- * @return {string} A JSON string
  */
-CacheItem.prototype.toJSON = function () {
-    return kvClient.get(this.id);
-};
+const getJSON: (a: CacheItem) => Promise<string> =
+    (item) => {
+        return kvClient().get(item.id);
+    };
 
 
-CacheItem.prototype.markDirty = function () {
-    this.dirty = true;
-    if (this.reloadTimeoutID !== null) {
-        clearTimeout(this.reloadTimeoutID);
-    }
-    var reload = this.loadFromPersistent.bind(this);
-    this.reloadTimeoutID = setTimeout(reload, 1000 * 60);
-};
+const markDirty: (a: CacheItem) => void =
+    (item) => {
+        item.dirty = true;
+        if (item.reloadTimeoutID !== null) {
+            clearTimeout(item.reloadTimeoutID);
+        }
+        this.reloadTimeoutID = setTimeout(() => { loadItem(item); }, 1000 * 60);
+    };
 
-CacheItem.prototype.markClean = function () {
-    this.dirty = false;
-    if (this.reloadTimeoutID !== null) {
-        clearTimeout(this.reloadTimeoutID);
-    }
-    this.reloadTimeoutID = null;
-};
-
-function CacheError () {
-    if(arguments.length > 0){
-        console.error.apply(console, arguments);
-    }
-}
+const markClean: (a: CacheItem) => void =
+    (item) => {
+        item.dirty = false;
+        item.data = null;
+        if (item.reloadTimeoutID !== null) {
+            clearTimeout(item.reloadTimeoutID);
+        }
+        item.reloadTimeoutID = null;
+    };
 
 
-function CacheStore () {
-    this.groups = {};
-}
 
-
-CacheStore.prototype.itemLoader = function (item) {
-    return (new Promise(function (resolve, reject) {
-        var success = function () {
-            resolve(item);
-        };
-        item.loadFromPersistent()
-            .then(success)
+const itemLoader = (item: CacheItem) => {
+    return (new Promise((resolve, reject) => {
+        loadItem(item)
+            .then(() => { resolve(item); })
             .catch(reject);
     }));
 };
 
-CacheStore.prototype.get = function (gid) {
-    logger('CacheStore.get', gid);
-    var item;
-    if (gid in this.groups) {
-        logger('Is In Store');
-        item = this.groups[gid];
-        if (!item.dirty) {
-            logger('Is Clean');
-            return Promise.resolve(item);
+const CacheStore = () => {
+    const storedGroups = new Map<string, CacheItem>();
+
+
+    const get = (gid: string) => {
+        logger(`CacheStore.get ${gid}`);
+        let item;
+        if (storedGroups.has(gid)) {
+            logger('Is In Store');
+            item = storedGroups.get(gid);
+            if (!item.dirty) {
+                logger('Is Clean');
+                return Promise.resolve(item);
+            }
+            else {
+                logger('Is Dirty');
+                itemLoader(item);
+            }
         }
         else {
-            logger('Is Dirty');
-            return this.itemLoader(item);
+            item = cacheItem(gid);
+            storedGroups.set(gid, item);
+            logger('Is Not In Store, insert', gid);
+            return itemLoader(item);
         }
-    }
-    else {
-        item = new CacheItem(gid);
-        this.groups[gid] = item;
-        logger('Is Not In Store, insert', gid);
-        return this.itemLoader(item);
-    }
-};
+    };
 
-CacheStore.prototype.actionCreate = function (objType, data, groups) {
-    if ('composition' === objType) {
-        if (data.group_id in this.groups) {
-            var lid = data.layer_id,
-                citem = this.groups[data.group_id];
-            citem.deps.push(lid);
-            citem.markDirty();
-            logger('Mark Dirty', data.group_id);
-        }
-    }
-    else if ('entity' === objType
-                 || 'path' === objType
-                 || 'spread' === objType) {
 
-        var layerId = data.layer_id;
-
-        _.each(this.groups, function(item, gid){
-            if(_.indexOf(item.deps, layerId) >= 0) {
-                item.markDirty();
-                groups.push(gid);
-                logger('Mark Dirty', gid);
+    const actionCreate = (objType: RecordType, data: ModelData, groups: any[]) => {
+        if (RecordType.Composition === objType) {
+            if (storedGroups.has(data.group_id)) {
+                const lid = data.layer_id;
+                const citem = storedGroups.get(data.group_id);
+                citem.deps.push(lid);
+                markDirty(citem);
+                logger('Mark Dirty', data.group_id);
             }
-        }, this);
-    }
-};
-
-CacheStore.prototype.actionUpdate = function (objType, data, groups) {
-    if ('group' === objType) {
-        if (data.id in this.groups) {
-            this.groups[data.id].markDirty();
         }
-        groups.push(data.id);
-    }
-    else {
-        var layerId;
-        if ('layer' === objType) {
-            layerId = data.id;
+        else if (RecordType.Entity === objType
+            || RecordType.Path === objType
+            || RecordType.Spread === objType) {
+
+            const layerId = data.layer_id;
+            storedGroups.forEach((item, gid) => {
+                if (item.deps.find((lid) => lid === data.layer_id)) {
+                    markDirty(item);
+                    groups.push(gid);
+                    logger('Mark Dirty', gid);
+                }
+            });
+        }
+    };
+
+    const actionUpdate = (objType: RecordType, data: ModelData, groups: any[]) => {
+        if (RecordType.Group === objType) {
+            if (storedGroups.has(data.id)) {
+                markDirty(storedGroups.get(data.id));
+            }
+            groups.push(data.id);
+        }
+        else {
+            let layerId;
+            if (RecordType.Layer === objType) {
+                layerId = data.id;
+            }
+            else if (RecordType.Entity === objType
+                || RecordType.Path === objType
+                || RecordType.Spread === objType) {
+                layerId = data.layer_id;
+            }
+
+            storedGroups.forEach((item, gid) => {
+                if (item.deps.find((lid) => lid === layerId)) {
+                    markDirty(item);
+                    groups.push(gid);
+                    logger('Mark Dirty', gid);
+                }
+            });
+        }
+    };
+
+
+    const actionDelete = (objType: RecordType, data: ModelData, groups: any[]) => {
+        if (RecordType.Composition === objType) {
+            if (storedGroups.has(data.group_id)) {
+                const lid = data.layer_id;
+                const citem = storedGroups.get(data.group_id);
+                citem.deps = citem.deps.filter((id) => id !== lid);
+                markDirty(citem);
+                logger('Mark Dirty', data.group_id);
+            }
         }
         else if ('entity' === objType
-                 || 'path' === objType
-                 || 'spread' === objType) {
-            layerId = data.layer_id;
+            || 'path' === objType
+            || 'spread' === objType) {
+
+            const layerId = data.layer_id;
+
+            _.each(this.groups, function (item, gid) {
+                if (_.indexOf(item.deps, layerId) >= 0) {
+                    item.markDirty();
+                    groups.push(gid);
+                    logger('Mark Dirty', gid);
+                }
+            }, this);
         }
-
-        _.each(this.groups, function(item, gid){
-            if(_.indexOf(item.deps, layerId) >= 0) {
-                item.markDirty();
-                groups.push(gid);
-                logger('Mark Dirty', gid);
-            }
-        }, this);
-    }
-};
+    };
 
 
-CacheStore.prototype.actionDelete = function (objType, data, groups) {
-    if ('composition' === objType) {
-        if (data.group_id in this.groups) {
-            var lid = data.layer_id,
-                citem = this.groups[data.group_id];
-            citem.deps = _.without(citem.deps, lid);
-            citem.markDirty();
-            logger('Mark Dirty', data.group_id);
-        }
-    }
-    else if ('entity' === objType
-                 || 'path' === objType
-                 || 'spread' === objType) {
 
-        var layerId = data.layer_id;
+}
 
-        _.each(this.groups, function(item, gid){
-            if(_.indexOf(item.deps, layerId) >= 0) {
-                item.markDirty();
-                groups.push(gid);
-                logger('Mark Dirty', gid);
-            }
-        }, this);
-    }
-};
+
+
+
+
+
+
+
 
 
 CacheStore.prototype.updateGroups = function (objType, action, data) {
     logger('CacheStore.updateGroups', objType);
-    var groups = [];
+    const groups = [];
     switch (action) {
         case 'create':
             this.actionCreate(objType, data, groups);
@@ -385,28 +393,27 @@ CacheStore.prototype.updateGroups = function (objType, action, data) {
 };
 
 
-CacheError.prototype = Object.create(Error.prototype);
 
-function Cache () {
+function Cache() {
     this.cs = new CacheStore();
 }
 
 
 _.extend(Cache.prototype, {
 
-    get: function(type, id) {
+    get: function (type, id) {
         return getFromPersistent(type, id);
     },
 
-    set: function(objType, obj) {
-        var self = this,
+    set: function (objType, obj) {
+        const self = this,
             action = ('id' in obj) ? 'update' : 'create';
 
-        var resolver = function (resolve, reject) {
+        const resolver = function (resolve, reject) {
             saveToPersistent(objType, obj)
-                .then(function(res){
-                    if(res.length > 0){
-                        var newObj = Types[objType].buildFromPersistent(res[0]);
+                .then(function (res) {
+                    if (res.length > 0) {
+                        const newObj = Types[objType].buildFromPersistent(res[0]);
                         resolve(newObj);
                         self.cs.updateGroups(objType, action, newObj);
                     }
@@ -418,7 +425,7 @@ _.extend(Cache.prototype, {
     },
 
     setFeature: function (obj) {
-        var geomType = (obj.geom) ? obj.geom.type : 'x';
+        const geomType = (obj.geom) ? obj.geom.type : 'x';
 
         if ('Point' === geomType) {
             return this.set('entity', obj);
@@ -434,10 +441,10 @@ _.extend(Cache.prototype, {
     },
 
     delFeature: function (lid, fid, geomType) {
-        var self = this;
+        const self = this;
 
-        var resolver = function (resolve, reject) {
-            var featureType,
+        const resolver = function (resolve, reject) {
+            const featureType,
                 queryName;
 
             if ('point' === geomType) {
@@ -452,7 +459,7 @@ _.extend(Cache.prototype, {
             queryName = featureType + 'Delete';
 
             persistentClient.query(queryName, [fid])
-                .then(function(){
+                .then(function () {
                     resolve();
                     self.cs.updateGroups(featureType, 'delete', {
                         'id': fid,
@@ -466,11 +473,11 @@ _.extend(Cache.prototype, {
     },
 
     delComposition: function (groupId, layerId) {
-        var self = this;
+        const self = this;
 
-        var resolver = function (resolve, reject) {
+        const resolver = function (resolve, reject) {
             persistentClient.query('compositionDelete', [groupId, layerId])
-                .then(function(){
+                .then(function () {
                     self.cs.updateGroups('composition', 'delete', {
                         'group_id': groupId
                     });
@@ -485,10 +492,10 @@ _.extend(Cache.prototype, {
 
 
     getGroup: function (gid) {
-        var ccst = this.cs;
-        var resolver = function(resolve, reject) {
+        const ccst = this.cs;
+        const resolver = function (resolve, reject) {
             ccst.get(gid)
-                .then(function(item){
+                .then(function (item) {
                     resolve(item.toJSON());
                 })
                 .catch(reject);
@@ -497,17 +504,17 @@ _.extend(Cache.prototype, {
     },
 
     lookupGroups: function (term) {
-        var self = this;
-        var transform = function (result) {
+        const self = this;
+        const transform = function (result) {
             // logger(result);
-            var response = result.response,
+            const response = result.response,
                 docs = response.docs,
                 objs = [];
-            for (var i = 0; i < docs.length; i++) {
-                var doc = docs[i],
+            for (const i = 0; i < docs.length; i++) {
+                const doc = docs[i],
                     groups = doc.groups || [];
                 // logger('::', doc);
-                for (var j = 0; j < groups.length; j++) {
+                for (const j = 0; j < groups.length; j++) {
                     objs.push(self.get('group', groups[j]));
                 }
             }
@@ -525,8 +532,8 @@ _.extend(Cache.prototype, {
 });
 
 
-module.exports.configure = function(){
-    if(cacheInstance){
+module.exports.configure = function () {
+    if (cacheInstance) {
         return;
     }
     kvClient = Store.client();
@@ -536,9 +543,11 @@ module.exports.configure = function(){
 };
 
 
-module.exports.client = function(){
-    if(!cacheInstance){
+module.exports.client = function () {
+    if (!cacheInstance) {
         throw (new Error('Cache not configured'));
     }
     return cacheInstance;
 };
+
+logger('module loaded');

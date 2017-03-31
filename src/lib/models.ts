@@ -100,3 +100,35 @@ export class Group extends Record {
     parameters = ['id', 'user_id', 'status_flag', 'properties'];
 }
 
+
+
+export enum RecordType {
+    Group,
+    Composition,
+    User,
+    Layer,
+    Spread,
+    Path,
+    Entity,
+}
+
+
+export const record: (a: RecordType) => Record =
+    (recType) => {
+        switch (recType) {
+            case RecordType.Group:
+                return (new Group());
+            case RecordType.Composition:
+                return (new Composition());
+            case RecordType.User:
+                return (new User());
+            case RecordType.Layer:
+                return (new Layer());
+            case RecordType.Spread:
+                return (new Spread());
+            case RecordType.Path:
+                return (new Path());
+            case RecordType.Entity:
+                return (new Entity());
+        }
+    }

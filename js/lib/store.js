@@ -50,22 +50,24 @@ const RedisStore = (port, host) => {
 const LevelStore = (path) => {
     const db = levelup(path);
     const put = (key, value) => {
-        return (new Promise((resolve, reject) => {
+        const resolver = (resolve, reject) => {
             db.put(key, value, (err) => {
                 if (err)
                     return reject(err);
                 resolve(key);
             });
-        }));
+        };
+        return (new Promise(resolver));
     };
     const get = (key) => {
-        return (new Promise(function (resolve, reject) {
-            db.get(key, function (err, value) {
+        const resolver = (resolve, reject) => {
+            db.get(key, (err, value) => {
                 if (err)
                     return reject(err);
                 resolve(value);
             });
-        }));
+        };
+        return (new Promise(resolver));
     };
     return { put, get };
 };

@@ -17,8 +17,8 @@ import levelup = require('levelup');
 
 const log = debug('waend:store');
 
-type PutFn = (key: string, data: any) => Promise<string>;
-type GetFn = (key: string) => Promise<any>;
+type PutFn = (key: string, data: string) => Promise<string>;
+type GetFn = (key: string) => Promise<string>;
 
 export interface IStore {
     put: PutFn;
@@ -50,7 +50,7 @@ const MemoryStore: () => IStore =
 
 type RedisCallback = redis.ResCallbackT<string>;
 type RedisResolveKey = (a: string) => void;
-type RedisResolveData = (a: any) => void;
+type RedisResolveData = (a: string) => void;
 type RedisReject = (a: Error) => void;
 
 const RedisStore: (a: number, b?: string) => IStore =
@@ -87,26 +87,33 @@ const RedisStore: (a: number, b?: string) => IStore =
     }
 
 
+// type LevelCallback = (err: Error, r: string) => void;
+type LevelResolveKey = (a: string) => void;
+type LevelResolveData = (a: string) => void;
+type LevelReject = (a: Error) => void;
+
 const LevelStore: (a: string) => IStore =
     (path) => {
         const db = levelup(path);
 
         const put: PutFn = (key, value) => {
-            return (new Promise<string>((resolve, reject) => {
+            const resolver = (resolve: LevelResolveKey, reject: LevelReject) => {
                 db.put(key, value, (err) => {
                     if (err) return reject(err);
                     resolve(key);
                 });
-            }));
+            };
+            return (new Promise(resolver));
         };
 
         const get: GetFn = (key) => {
-            return (new Promise(function (resolve, reject) {
-                db.get(key, function (err, value) {
+            const resolver = (resolve: LevelResolveData, reject: LevelReject) => {
+                db.get(key, (err, value) => {
                     if (err) return reject(err);
-                    resolve(value);
+                    resolve(<string>value);
                 });
-            }));
+            };
+            return (new Promise(resolver));
         }
 
         return { put, get };
