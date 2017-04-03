@@ -1,6 +1,6 @@
 
 /*
- * lib/token.js
+ * lib/token.ts
  *
  *
  * Copyright (C) 2014  Pierre Marchand <pierremarc07@gmail.com>
@@ -9,74 +9,71 @@
  *
  */
 
-var _ = require('underscore'),
-    uuid = require('node-uuid');
+import * as debug from 'debug';
+import uuid from 'uuid';
+import { ModelData } from "./models";
 
-var defaultExpire = 1000 * 60,
-    tokens = [],
-    intervalId;
+const logger = debug('waend:token');
 
-function Token (user) {
-
-    Object.defineProperty(this, 'token', {
-        value: uuid.v4()
-    });
-    Object.defineProperty(this, 'user', {
-        value: user
-    });
-    Object.defineProperty(this, 'ts', {
-        value: Date.now()
-    });
-
+export interface IToken {
+    readonly id: string;
+    readonly user: ModelData;
+    readonly ts: number;
 }
 
-Token.prototype.toJSON = function () {
+const defaultExpire = 1000 * 60;
+const tokens = new Map<string, IToken>();
+
+const Token: (a: ModelData) => IToken =
+    (user) => {
+        return {
+            id: uuid.v4(),
+            user: user,
+            ts: Date.now(),
+        }
+
+    }
+
+
+export const jsonToken = (token: IToken) => {
     return {
-        user: this.user.id,
-        token: this.token
+        user: token.user.id,
+        token: token.id
     };
 };
 
-function vacuumFn () {
-    var newTks = [],
-        limit = Date.now() - defaultExpire;
-    for (var i = 0; i < tokens.length; i++) {
-        if (tokens[i].ts < limit) {
-            newTks.push(tokens[i]);
-        }
-    }
-    if (tokens.length !== newTks.length) {
-        tokens = newTks;
-    }
-}
 
-function startVacuumTask () {
-    if (intervalId) {
-        return;
-    }
-    intervalId = setInterval(vacuumFn, 1000);
-}
 
-// function stopVacuumTask () {
-//     if (intervalId && (0 === tokens.length)) {
-//         clearInterval(intervalId);
-//         intervalId = null;
-//     }
-// }
-
-startVacuumTask();
-
-module.exports.put = function(user){
-    var t = new Token(user);
-    tokens.push(t);
+export const put = (user: ModelData) => {
+    const t = Token(user);
+    tokens.set(t.id, t);
     return t;
 };
 
-module.exports.get = function(tok){
-    for (var i = 0; i < tokens.length; i++) {
-        if (tok === tokens[i].token) {
-            return tokens[i].user;
-        }
+export const get = (tokId: string) => {
+    if (tokens.has(tokId)) {
+        const tok = tokens.get(tokId);
+
+        return tok.user;
     }
+
     return null;
 };
+
+
+setInterval(() => {
+    const limit = Date.now() - defaultExpire;
+    const toDeleteList: string[] = [];
+
+    tokens.forEach((tok, id) => {
+        if (tok.ts < limit) {
+            toDeleteList.push(id);
+        }
+    });
+
+    toDeleteList.forEach((id) => { tokens.delete(id) });
+
+}, 1000);
+
+
+logger('module loaded');

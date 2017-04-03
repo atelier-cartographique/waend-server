@@ -10,13 +10,13 @@
 import * as debug from 'debug';
 import * as Promise from 'bluebird';
 import * as solr from 'solr-client';
-import { ModelData } from './models';
+import { ModelData, RecordType } from './models';
 
 const logger = debug('waend:indexer');
 
 
-type IndexerUpdate = (a: string, b: string[], c: ModelData) => Promise<void>;
-type IndexerUpdateBatch = (a: string, b: string[], c: ModelData[]) => Promise<void>;
+type IndexerUpdate = (a: RecordType, b: string[], c: ModelData) => Promise<void>;
+type IndexerUpdateBatch = (a: RecordType, b: string[], c: ModelData[]) => Promise<void>;
 type IndexerSearch = (a: string) => Promise<any>;
 
 export interface IIndexer {
@@ -37,7 +37,7 @@ const Indexer: (a: solr.Client) => IIndexer =
             (type, groups, models) => {
                 const docs = models.map((model) => ({
                     id: model.id,
-                    type: type,
+                    type: RecordType[type],
                     groups: groups || [],
                     properties: model.properties
                 }));

@@ -8,105 +8,103 @@
  *
  */
 
+import * as debug from 'debug';
+import * as bcrypt from 'bcrypt';
+import * as uuid from 'uuid';
+import { client as cache } from './cache';
+import { client as db } from './db';
+import { QueryResult } from "pg";
+import { RecordType, ModelData } from "./models";
 
-var logger = require('debug')('lib/auth'),
-    _ = require('underscore'),
-    Promise = require('bluebird'),
-    bcrypt = require('bcrypt'),
-    uuid = require('node-uuid'),
-    cache = require('./cache'),
-    db = require('./db'); // auth is not cached;
 
-Promise.longStackTraces();
+const logger = debug('lib/auth');
 
-var bcryptGenSalt = Promise.promisify(bcrypt.genSalt);
-var bcryptHash = Promise.promisify(bcrypt.hash);
-var bcryptCompare = Promise.promisify(bcrypt.compare);
 
-function AuthError () {
-    if(arguments.length > 0){
-        console.error.apply(console, arguments);
+const getAuthenicatedUser = (authId: string) => {
+    return db().query('userGetAuth', [authId]);
+}
+
+
+const comparePassword: (a: string) => (b: QueryResult) => Promise<string> =
+    (password) => (qr) => {
+        // fields = ['id', 'email', 'hash'];
+        if (qr.rowCount < 1) {
+            return Promise.reject(new Error('not a registered user'));
+        }
+
+        const hash: string = qr.rows[0].password;
+        const id: string = qr.rows[0].id;
+
+        const resolve = (result: boolean) => {
+            if (!result) {
+                // return Promise.reject(new Error('wrong password'));
+                throw (new Error('wrong password'));
+            }
+            return id;
+        };
+
+        return (
+            bcrypt
+                .compare(password, hash)
+                .then(resolve)
+        );
+
     }
-}
-AuthError.prototype = Object.create(Error.prototype);
 
 
+export type DoneFn = (a: Error | null, b: ModelData | null) => void;
 
-function getAuthenicatedUser (authId) {
-    return db.client()
-             .query('userGetAuth', [authId]);
-}
-
-
-function comparePassword (password, authRow) {
-    // fields = ['id', 'email', 'hash'];
-    if(authRow.length > 0){
-        var hash = authRow[0].password,
-            id = authRow[0].id;
-
-        // var next = _.partial(getAuthenicatedUser, id);
-        // logger('auth.comparePassword |'+password+ '|'+hash+'|');
-        return bcryptCompare(password, hash)
-            .then(function(result){
-                if(!result){
-                    return Promise.reject('wrong password');
-                }
-                return getAuthenicatedUser(id);
-            });
-    }
-    return Promise.reject(new AuthError('not a registered user'));
-}
-
-module.exports.verify = function (email, password, done) {
-
-    var resolve = function (result) {
-        // logger('auth.verify.resolve', result);
-        if(result){
+export const verify = (email: string, password: string, done: DoneFn) => {
+    const resolve = (result) => {
+        if (result) {
             return done(null, result);
         }
-        return  done(new AuthError('wrong credentials'), null);
+        return done(new Error('wrong credentials'), null);
     };
 
-    var reject = function (err) {
-        return done(new AuthError(err), null);
+    const reject = function (err) {
+        return done(new Error(err), null);
     };
 
-    var seededComparePassword = _.partial(comparePassword, password);
-
-    db.client()
-        .query('authGetEmail', [email])
-        .then(seededComparePassword)
-        .then(function(row){ return row[0]; })
-        .then(resolve)
-        .catch(reject);
+    return (
+        db()
+            .query('authGetEmail', [email])
+            .then(comparePassword(password))
+            .then(getAuthenicatedUser)
+            .then((result) => result.rows[0])
+            .then(resolve)
+            .catch(reject));
 };
 
 
-function createUser (name, auth_row) {
-    var auth_id = auth_row[0].id,
+const createUser = (name: string) => (qr: QueryResult) => {
+    const auth_id = qr.rows[0].id,
         user = {
-        auth_id: auth_id,
-        properties: {
-            name: name
-        }
-    };
-    return cache.client().set('user', user);
-}
-
-
-function createAuth (email, hash) {
-// logger('auth.createAuth', email, hash);
-    return db.client()
-        .query('authCreate', [uuid.v4(), email, hash]);
-}
-
-module.exports.register = function (email, password, name) {
-    var seededCreateAuth = _.partial(createAuth, email),
-        seededCreateUser = _.partial(createUser, name),
-        fnHash = _.partial(bcryptHash, password);
-// logger('auth.register', email, password);
-    return bcryptGenSalt(12)
-            .then(fnHash)
-            .then(seededCreateAuth)
-            .then(seededCreateUser);
+            auth_id: auth_id,
+            properties: {
+                name: name
+            }
+        };
+    return cache().set(RecordType.User, user);
 };
+
+
+const createAuth = (email: string) => (hash: string) => {
+    // logger('auth.createAuth', email, hash);
+    return db().query('authCreate', [uuid.v4(), email, hash]);
+};
+
+export const register = (email: string, password: string, name: string) => {
+    const seededCreateAuth = createAuth(email);
+    const seededCreateUser = createUser(name);
+
+    return (
+        bcrypt
+            .genSalt(12)
+            .then((salt) => bcrypt.hash(password, salt))
+            .then<QueryResult>(seededCreateAuth)
+            .then(seededCreateUser));
+};
+
+
+logger('module loaded');

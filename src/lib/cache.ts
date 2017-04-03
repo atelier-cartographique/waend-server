@@ -252,67 +252,47 @@ const itemLoader = (item: CacheItem) => {
     }));
 };
 
-const CacheStore = () => {
-    const storedGroups = new Map<string, CacheItem>();
+enum CacheStoreAction {
+    Create,
+    Update,
+    Delete
+}
+
+interface ICacheStore {
+    get(a: string): Promise<any>;
+    update(a: RecordType, b: CacheStoreAction, c: ModelData): void;
+}
+
+const CacheStore: () => ICacheStore =
+    () => {
+        const storedGroups = new Map<string, CacheItem>();
 
 
-    const get = (gid: string) => {
-        logger(`CacheStore.get ${gid}`);
-        let item;
-        if (storedGroups.has(gid)) {
-            logger('Is In Store');
-            item = storedGroups.get(gid);
-            if (!item.dirty) {
-                logger('Is Clean');
-                return Promise.resolve(item);
+        const get = (gid: string) => {
+            logger(`CacheStore.get ${gid}`);
+            let item;
+            if (storedGroups.has(gid)) {
+                logger('Is In Store');
+                item = storedGroups.get(gid);
+                if (!item.dirty) {
+                    logger('Is Clean');
+                    return Promise.resolve(item);
+                }
+                else {
+                    logger('Is Dirty');
+                    itemLoader(item);
+                }
             }
             else {
-                logger('Is Dirty');
-                itemLoader(item);
+                item = cacheItem(gid);
+                storedGroups.set(gid, item);
+                logger('Is Not In Store, insert', gid);
+                return itemLoader(item);
             }
-        }
-        else {
-            item = cacheItem(gid);
-            storedGroups.set(gid, item);
-            logger('Is Not In Store, insert', gid);
-            return itemLoader(item);
-        }
-    };
+        };
 
 
-    const actionCreate = (objType: RecordType, data: ModelData, groups: any[]) => {
-        if (RecordType.Composition === objType) {
-            if (storedGroups.has(data.group_id)) {
-                const lid = data.layer_id;
-                const citem = storedGroups.get(data.group_id);
-                citem.deps.push(lid);
-                markDirty(citem);
-                logger('Mark Dirty', data.group_id);
-            }
-        }
-        else if (RecordType.Entity === objType
-            || RecordType.Path === objType
-            || RecordType.Spread === objType) {
-
-            const layerId = data.layer_id;
-            storedGroups.forEach((item, gid) => {
-                if (item.deps.find((lid) => lid === data.layer_id)) {
-                    markDirty(item);
-                    groups.push(gid);
-                    logger('Mark Dirty', gid);
-                }
-            });
-        }
-    };
-
-    const actionUpdate = (objType: RecordType, data: ModelData, groups: any[]) => {
-        if (RecordType.Group === objType) {
-            if (storedGroups.has(data.id)) {
-                markDirty(storedGroups.get(data.id));
-            }
-            groups.push(data.id);
-        }
-        else {
+        const dirtyDeps = (objType: RecordType, data: ModelData, groups: any[]) => {
             let layerId;
             if (RecordType.Layer === objType) {
                 layerId = data.id;
@@ -320,9 +300,9 @@ const CacheStore = () => {
             else if (RecordType.Entity === objType
                 || RecordType.Path === objType
                 || RecordType.Spread === objType) {
+
                 layerId = data.layer_id;
             }
-
             storedGroups.forEach((item, gid) => {
                 if (item.deps.find((lid) => lid === layerId)) {
                     markDirty(item);
@@ -331,223 +311,236 @@ const CacheStore = () => {
                 }
             });
         }
+
+        const actionCreate = (objType: RecordType, data: ModelData, groups: any[]) => {
+            if (RecordType.Composition === objType) {
+                if (storedGroups.has(data.group_id)) {
+                    const lid = data.layer_id;
+                    const citem = storedGroups.get(data.group_id);
+                    citem.deps.push(lid);
+                    markDirty(citem);
+                    logger('Mark Dirty', data.group_id);
+                }
+            }
+            else {
+                dirtyDeps(objType, data, groups);
+            }
+        };
+
+        const actionUpdate = (objType: RecordType, data: ModelData, groups: any[]) => {
+            if (RecordType.Group === objType) {
+                if (storedGroups.has(data.id)) {
+                    markDirty(storedGroups.get(data.id));
+                }
+                groups.push(data.id);
+            }
+            else {
+                dirtyDeps(objType, data, groups);
+            }
+        };
+
+
+        const actionDelete = (objType: RecordType, data: ModelData, groups: any[]) => {
+            if (RecordType.Composition === objType) {
+                if (storedGroups.has(data.group_id)) {
+                    const lid = data.layer_id;
+                    const citem = storedGroups.get(data.group_id);
+                    citem.deps = citem.deps.filter((id) => id !== lid);
+                    markDirty(citem);
+                    logger('Mark Dirty', data.group_id);
+                }
+            }
+            else {
+                dirtyDeps(objType, data, groups);
+            }
+        };
+
+        const updateGroups = (objType: RecordType, action: CacheStoreAction, data: ModelData) => {
+            logger('CacheStore.updateGroups', objType);
+            const groups = [];
+            switch (action) {
+                case CacheStoreAction.Create:
+                    actionCreate(objType, data, groups);
+                    break;
+                case CacheStoreAction.Update:
+                    actionUpdate(objType, data, groups);
+                    break;
+                case CacheStoreAction.Delete:
+                    actionDelete(objType, data, groups);
+                    break;
+            }
+            if (groups.length > 0) {
+                indexerClient().update(objType, groups, data);
+            }
+        };
+
+        return { get, update: updateGroups };
+    }
+
+
+
+export interface ICache {
+    get(a: RecordType, b: string): Promise<ModelData>;
+    set(a: RecordType, b: BaseModelData | ModelData): Promise<ModelData>;
+    setFeature(b: BaseModelData | ModelData): Promise<ModelData>;
+    delFeature(a: string, b: string, c: string): Promise<void>;
+    delComposition(a: string): Promise<void>;
+    getGroup(a: string): Promise<string>;
+    lookupGroups(a: string): Promise<ModelData[]>;
+    query(a: string, b: RecordType, c: any[]): Promise<ModelData[]>;
+}
+
+const cacheStore = CacheStore();
+
+const Cache: () => ICache =
+    () => {
+
+
+        const get = (type: RecordType, id: string) => {
+            return getFromPersistent(type, id);
+        };
+
+
+        const set = (objType: RecordType, obj: BaseModelData | ModelData) => {
+            const action = ('id' in obj) ? CacheStoreAction.Update : CacheStoreAction.Create;
+
+            const resolver = (resolve: (a: ModelData) => void) => {
+                saveToPersistent(objType, obj)
+                    .then(function (res) {
+                        if (res.rowCount > 0) {
+                            const newObj = record(objType)
+                                .buildFromPersistent(res.rows[0]);
+                            resolve(newObj);
+                            cacheStore.update(objType, action, newObj);
+                        }
+                    });
+            };
+
+            return new Promise(resolver);
+        };
+
+
+        const setFeature = (obj: ModelData) => {
+            const geomType = (obj.geom) ? obj.geom.type : 'GeometryNone';
+
+            if ('Point' === geomType) {
+                return set(RecordType.Entity, obj);
+            }
+            else if ('LineString' === geomType) {
+                return set(RecordType.Path, obj);
+            }
+            else if ('Polygon' === geomType) {
+                return set(RecordType.Spread, obj);
+            }
+
+            return Promise.reject(`unsupported geometry type ${geomType}`);
+        };
+
+
+        const delFeature = (lid: string, fid: string, geomType: string) => {
+            const resolver = (resolve: () => void, reject) => {
+                let featureType: RecordType;
+                let queryName: string;
+
+                if ('point' === geomType) {
+                    featureType = RecordType.Entity;
+                }
+                else if ('linestring' === geomType) {
+                    featureType = RecordType.Path;
+                }
+                else if ('polygon' === geomType) {
+                    featureType = RecordType.Spread;
+                }
+                queryName = RecordType[featureType] + 'Delete';
+
+                persistentClient().query(queryName, [fid])
+                    .then(() => {
+                        resolve();
+                        cacheStore.update(featureType, CacheStoreAction.Delete, {
+                            id: fid,
+                            layer_id: lid,
+                            properties: {}
+                        });
+                    })
+                    .catch(reject);
+            };
+
+            return new Promise<void>(resolver);
+        };
+
+
+        const delComposition = (id: string) => {
+            const resolver = (resolve: () => void, reject) => {
+                persistentClient()
+                    .query('compositionDelete', [id])
+                    .then(function () {
+                        resolve();
+                        cacheStore.update(RecordType.Composition, CacheStoreAction.Delete, {
+                            id: id,
+                            properties: {}
+                        });
+                    })
+                    .catch(reject);
+            };
+
+            return new Promise<void>(resolver);
+        };
+
+
+        const getGroup = (gid: string) => {
+            const resolver = (resolve: (a: string) => void, reject) => {
+                cacheStore
+                    .get(gid)
+                    .then(getJSON)
+                    .then(resolve)
+                    .catch(reject);
+            };
+            return (new Promise(resolver));
+        };
+
+
+        const lookupGroups = (term: string) => {
+            const transform = (result) => {
+                const response = result.response;
+                const docs: any[] = response.docs;
+                const objs: Promise<ModelData>[] = docs.reduce((acc, doc) => {
+                    const groups: string[] = doc.groups || [];
+                    groups.forEach((gid) => {
+                        acc.push(get(RecordType.Group, gid));
+                    });
+                    return acc;
+                }, []);
+
+                return Promise.all(objs);
+            };
+            return (
+                indexerClient()
+                    .search(`*${term}*`)
+                    .then(transform)
+            );
+        };
+
+
+        const query = (qname: string, type: RecordType, args: any[]) => {
+            return queryPersistent(qname, type, args);
+        }
+
+
+        return {
+            get,
+            set,
+            setFeature,
+            delFeature,
+            delComposition,
+            getGroup,
+            lookupGroups,
+            query
+        };
     };
 
 
-    const actionDelete = (objType: RecordType, data: ModelData, groups: any[]) => {
-        if (RecordType.Composition === objType) {
-            if (storedGroups.has(data.group_id)) {
-                const lid = data.layer_id;
-                const citem = storedGroups.get(data.group_id);
-                citem.deps = citem.deps.filter((id) => id !== lid);
-                markDirty(citem);
-                logger('Mark Dirty', data.group_id);
-            }
-        }
-        else if ('entity' === objType
-            || 'path' === objType
-            || 'spread' === objType) {
-
-            const layerId = data.layer_id;
-
-            _.each(this.groups, function (item, gid) {
-                if (_.indexOf(item.deps, layerId) >= 0) {
-                    item.markDirty();
-                    groups.push(gid);
-                    logger('Mark Dirty', gid);
-                }
-            }, this);
-        }
-    };
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-CacheStore.prototype.updateGroups = function (objType, action, data) {
-    logger('CacheStore.updateGroups', objType);
-    const groups = [];
-    switch (action) {
-        case 'create':
-            this.actionCreate(objType, data, groups);
-            break;
-        case 'update':
-            this.actionUpdate(objType, data, groups);
-            break;
-        case 'delete':
-            this.actionDelete(objType, data, groups);
-            break;
-    }
-    if (groups.length > 0) {
-        indexerClient.update(objType, groups, data);
-    }
-};
-
-
-
-function Cache() {
-    this.cs = new CacheStore();
-}
-
-
-_.extend(Cache.prototype, {
-
-    get: function (type, id) {
-        return getFromPersistent(type, id);
-    },
-
-    set: function (objType, obj) {
-        const self = this,
-            action = ('id' in obj) ? 'update' : 'create';
-
-        const resolver = function (resolve, reject) {
-            saveToPersistent(objType, obj)
-                .then(function (res) {
-                    if (res.length > 0) {
-                        const newObj = Types[objType].buildFromPersistent(res[0]);
-                        resolve(newObj);
-                        self.cs.updateGroups(objType, action, newObj);
-                    }
-                })
-                .catch(reject);
-        };
-
-        return new Promise(resolver);
-    },
-
-    setFeature: function (obj) {
-        const geomType = (obj.geom) ? obj.geom.type : 'x';
-
-        if ('Point' === geomType) {
-            return this.set('entity', obj);
-        }
-        else if ('LineString' === geomType) {
-            return this.set('path', obj);
-        }
-        else if ('Polygon' === geomType) {
-            return this.set('spread', obj);
-        }
-
-        return Promise.reject('unsupported geometry type');
-    },
-
-    delFeature: function (lid, fid, geomType) {
-        const self = this;
-
-        const resolver = function (resolve, reject) {
-            const featureType,
-                queryName;
-
-            if ('point' === geomType) {
-                featureType = 'entity';
-            }
-            else if ('linestring' === geomType) {
-                featureType = 'path';
-            }
-            else if ('polygon' === geomType) {
-                featureType = 'spread';
-            }
-            queryName = featureType + 'Delete';
-
-            persistentClient.query(queryName, [fid])
-                .then(function () {
-                    resolve();
-                    self.cs.updateGroups(featureType, 'delete', {
-                        'id': fid,
-                        'layer_id': lid
-                    });
-                })
-                .catch(reject);
-        };
-
-        return new Promise(resolver);
-    },
-
-    delComposition: function (groupId, layerId) {
-        const self = this;
-
-        const resolver = function (resolve, reject) {
-            persistentClient.query('compositionDelete', [groupId, layerId])
-                .then(function () {
-                    self.cs.updateGroups('composition', 'delete', {
-                        'group_id': groupId
-                    });
-                    resolve();
-                })
-                .catch(reject);
-        };
-
-        return new Promise(resolver);
-    },
-
-
-
-    getGroup: function (gid) {
-        const ccst = this.cs;
-        const resolver = function (resolve, reject) {
-            ccst.get(gid)
-                .then(function (item) {
-                    resolve(item.toJSON());
-                })
-                .catch(reject);
-        };
-        return (new Promise(resolver));
-    },
-
-    lookupGroups: function (term) {
-        const self = this;
-        const transform = function (result) {
-            // logger(result);
-            const response = result.response,
-                docs = response.docs,
-                objs = [];
-            for (const i = 0; i < docs.length; i++) {
-                const doc = docs[i],
-                    groups = doc.groups || [];
-                // logger('::', doc);
-                for (const j = 0; j < groups.length; j++) {
-                    objs.push(self.get('group', groups[j]));
-                }
-            }
-
-            return Promise.all(objs);
-        };
-        return indexerClient.search('*' + term + '*').then(transform);
-    },
-
-    query: function (qname, type, args) {
-        return queryPersistent(qname, type, args);
-    }
-
-
-});
-
-
-module.exports.configure = function () {
-    if (cacheInstance) {
-        return;
-    }
-    kvClient = Store.client();
-    persistentClient = Database.client();
-    indexerClient = Indexer.client();
-    cacheInstance = new Cache();
-};
-
-
-module.exports.client = function () {
-    if (!cacheInstance) {
-        throw (new Error('Cache not configured'));
-    }
-    return cacheInstance;
+export const client = function () {
+    return Cache();
 };
 
 logger('module loaded');
