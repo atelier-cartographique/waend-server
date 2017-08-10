@@ -87,92 +87,92 @@ export default (prefix = '', schema = 'public'): IQueries => {
         // entities
         entityLoad: {
             params: [],
-            sql: geometricSQLLoad('entities')
+            sql: geometricSQLLoad('entities'),
         },
         entityLoadPart: {
             params: ['offset', 'limit'],
-            sql: geometricSQLLoadPart('entities')
+            sql: geometricSQLLoadPart('entities'),
         },
         entityUpdate: {
             params: geometricTableParams(),
-            sql: geometricSQLUpdate('entities')
+            sql: geometricSQLUpdate('entities'),
         },
         entityCreate: {
             params: geometricTableParams(),
-            sql: geometricSQLCreate('entities')
+            sql: geometricSQLCreate('entities'),
         },
         entityDelete: {
             params: ['id'],
-            sql: sqlDelete('entities')
+            sql: sqlDelete('entities'),
         },
         entityGet: {
             params: ['id'],
-            sql: geometricSQLGet('entities')
+            sql: geometricSQLGet('entities'),
         },
         entityGetLayer: {
             params: ['layer_id'],
-            sql: geometricSQLGetLayer('entities')
+            sql: geometricSQLGetLayer('entities'),
         },
 
         // paths
         pathLoad: {
             params: [],
-            sql: geometricSQLLoad('paths')
+            sql: geometricSQLLoad('paths'),
         },
         pathLoadPart: {
             params: ['offset', 'limit'],
-            sql: geometricSQLLoadPart('paths')
+            sql: geometricSQLLoadPart('paths'),
         },
         pathUpdate: {
             params: geometricTableParams(),
-            sql: geometricSQLUpdate('paths')
+            sql: geometricSQLUpdate('paths'),
         },
         pathCreate: {
             params: geometricTableParams(),
-            sql: geometricSQLCreate('paths')
+            sql: geometricSQLCreate('paths'),
         },
         pathDelete: {
             params: ['id'],
-            sql: sqlDelete('paths')
+            sql: sqlDelete('paths'),
         },
         pathGet: {
             params: ['id'],
-            sql: geometricSQLGet('paths')
+            sql: geometricSQLGet('paths'),
         },
         pathGetLayer: {
             params: ['layer_id'],
-            sql: geometricSQLGetLayer('paths')
+            sql: geometricSQLGetLayer('paths'),
         },
 
 
         // spreads
         spreadLoad: {
             params: [],
-            sql: geometricSQLLoad('spreads')
+            sql: geometricSQLLoad('spreads'),
         },
         spreadLoadPart: {
             params: ['offset', 'limit'],
-            sql: geometricSQLLoadPart('spreads')
+            sql: geometricSQLLoadPart('spreads'),
         },
         spreadUpdate: {
             params: geometricTableParams(),
-            sql: geometricSQLUpdate('spreads')
+            sql: geometricSQLUpdate('spreads'),
         },
         spreadCreate: {
             params: geometricTableParams(),
-            sql: geometricSQLCreate('spreads')
+            sql: geometricSQLCreate('spreads'),
         },
         spreadDelete: {
             params: ['id'],
-            sql: sqlDelete('spreads')
+            sql: sqlDelete('spreads'),
         },
         spreadGet: {
             params: ['id'],
-            sql: geometricSQLGet('spreads')
+            sql: geometricSQLGet('spreads'),
         },
         spreadGetLayer: {
             params: ['layer_id'],
-            sql: geometricSQLGetLayer('spreads')
+            sql: geometricSQLGetLayer('spreads'),
         },
 
 
@@ -181,21 +181,21 @@ export default (prefix = '', schema = 'public'): IQueries => {
             params: [],
             sql: `
                 SELECT id, user_id, properties 
-                FROM ${tableName('layers')};`
+                FROM ${tableName('layers')};`,
         },
         layerLoadPart: {
             params: ['offset', 'limit'],
             sql: `
                 SELECT id, user_id, properties 
                 FROM ${tableName('layers')}
-                ORDER BY id LIMIT $2 OFFSET $1;`
+                ORDER BY id LIMIT $2 OFFSET $1;`,
         },
         layerGet: {
             params: ['id'],
             sql: `
                 SELECT id, user_id, properties 
                 FROM ${tableName('layers')}
-                WHERE id = $1;`
+                WHERE id = $1;`,
         },
         layerUpdate: {
             params: ['id', 'user_id', 'properties'],
@@ -203,7 +203,7 @@ export default (prefix = '', schema = 'public'): IQueries => {
                 UPDATE ${tableName('layers')}
                 SET (id, user_id, properties) = ($1, $2, $3) 
                 WHERE id = $1 
-                RETURNING *;`
+                RETURNING *;`,
         },
         layerCreate: {
             params: ['id', 'user_id', 'properties'],
@@ -212,29 +212,29 @@ export default (prefix = '', schema = 'public'): IQueries => {
                     (id, user_id, properties)
                 VALUES
                     ($1, $2, $3)
-                RETURNING *;`
+                RETURNING *;`,
         },
 
         // users
         userLoad: {
             params: [],
-            sql: "SELECT id, auth_id, properties FROM " + tableName('users') + ' ;'
+            sql: 'SELECT id, auth_id, properties FROM ' + tableName('users') + ' ;',
         },
         userGet: {
             params: ['id'],
-            sql: "SELECT id, auth_id, properties FROM " + tableName('users') + '  WHERE id = $1;'
+            sql: 'SELECT id, auth_id, properties FROM ' + tableName('users') + '  WHERE id = $1;',
         },
         userGetAuth: {
             params: ['auth_id'],
-            sql: "SELECT id, auth_id, properties FROM " + tableName('users') + '  WHERE auth_id = $1;'
+            sql: 'SELECT id, auth_id, properties FROM ' + tableName('users') + '  WHERE auth_id = $1;',
         },
         userUpdate: {
             params: ['id', 'auth_id', 'properties'],
-            sql: "UPDATE " + tableName('users') + " SET (id, auth_id, properties) = ($1, $2, $3) WHERE id = $1 and auth_id = $2 RETURNING *;"
+            sql: 'UPDATE ' + tableName('users') + ' SET (id, auth_id, properties) = ($1, $2, $3) WHERE id = $1 and auth_id = $2 RETURNING *;',
         },
         userCreate: {
             params: ['id', 'auth_id', 'properties'],
-            sql: "INSERT INTO " + tableName('users') + " (id, auth_id, properties) VALUES ($1, $2, $3) RETURNING *;"
+            sql: 'INSERT INTO ' + tableName('users') + ' (id, auth_id, properties) VALUES ($1, $2, $3) RETURNING *;',
         },
 
         // subscriptions
@@ -256,7 +256,7 @@ export default (prefix = '', schema = 'public'): IQueries => {
             params: [],
             sql: `
                 SELECT id, layer_id, group_id 
-                FROM ${tableName('compositions')};`
+                FROM ${tableName('compositions')};`,
         },
         compositionLoadPart: {
             params: ['offset', 'limit'],
@@ -264,21 +264,21 @@ export default (prefix = '', schema = 'public'): IQueries => {
                 SELECT id, layer_id, group_id 
                 FROM ${tableName('compositions')}
                 ORDER BY id 
-                LIMIT $2 OFFSET $1;`
+                LIMIT $2 OFFSET $1;`,
         },
         compositionGetForGroup: {
             params: ['group_id'],
             sql: `
                 SELECT id, layer_id, group_id 
                 FROM ${tableName('compositions')}
-                WHERE group_id = $1;`
+                WHERE group_id = $1;`,
         },
         compositionGetForLayer: {
             params: ['layer_id'],
             sql: `
                 SELECT id, layer_id, group_id 
                 FROM ${tableName('compositions')}
-                WHERE layer_id = $1;`
+                WHERE layer_id = $1;`,
         },
         compositionCreate: {
             params: ['id', 'layer_id', 'group_id'],
@@ -287,13 +287,13 @@ export default (prefix = '', schema = 'public'): IQueries => {
                     (id, layer_id, group_id)
                 VALUES 
                     ($1, $2, $3) 
-                RETURNING *;`
+                RETURNING *;`,
         },
         compositionDelete: {
             params: ['group_id', 'layer_id'],
             sql: `
                 DELETE FROM ${tableName('compositions')}
-                WHERE  group_id = $1 AND layer_id = $2;`
+                WHERE  group_id = $1 AND layer_id = $2;`,
         },
 
         // groups
@@ -301,7 +301,7 @@ export default (prefix = '', schema = 'public'): IQueries => {
             params: [],
             sql: `
                 SELECT id, user_id, status_flag, properties 
-                FROM ${tableName('groups')};`
+                FROM ${tableName('groups')};`,
         },
         groupLoadPart: {
             params: ['offset', 'limit'],
@@ -309,14 +309,14 @@ export default (prefix = '', schema = 'public'): IQueries => {
                 SELECT id, user_id, status_flag, properties 
                 FROM ${tableName('groups')}
                 ORDER BY id 
-                LIMIT $2 OFFSET $1;`
+                LIMIT $2 OFFSET $1;`,
         },
         groupGet: {
             params: ['id'],
             sql: `
                 SELECT id, user_id, status_flag, properties 
                 FROM ${tableName('groups')}
-                WHERE id = $1;`
+                WHERE id = $1;`,
         },
         groupUpdate: {
             params: ['id', 'user_id', 'status_flag', 'properties'],
@@ -325,7 +325,7 @@ export default (prefix = '', schema = 'public'): IQueries => {
                 SET (id, user_id, status_flag, properties) 
                   = ($1, $2, $3, $4)
                 WHERE id = $1 AND user_id = $2 
-                RETURNING *;`
+                RETURNING *;`,
         },
         groupCreate: {
             params: ['id', 'user_id', 'status_flag', 'properties'],
@@ -334,14 +334,14 @@ export default (prefix = '', schema = 'public'): IQueries => {
                     (id, user_id, status_flag, properties)
                 VALUES
                     ($1, $2, $3, $4)
-                RETURNING *;`
+                RETURNING *;`,
         },
         groupListForUser: {
             params: ['user_id'],
             sql: `
                 SELECT id, user_id, status_flag, properties
                 FROM ${tableName('groups')}
-                WHERE user_id = $1;`
+                WHERE user_id = $1;`,
         },
 
 
@@ -354,7 +354,7 @@ export default (prefix = '', schema = 'public'): IQueries => {
                     (id, email, password)
                 VALUES
                     ($1, $2, $3)
-                RETURNING *;`
+                RETURNING *;`,
         },
 
         authGetEmail: {
@@ -362,8 +362,73 @@ export default (prefix = '', schema = 'public'): IQueries => {
             sql: `
                 SELECT * 
                 FROM ${tableName('auth')}
-                WHERE email=$1;`
-        }
+                WHERE email=$1;`,
+        },
+
+        // medias
+        mediaList: {
+            params: ['user_id'],
+            sql: `
+                SELECT id, user_id, properties 
+                FROM ${tableName('medias')}
+                WHERE user_id = $1;`,
+        },
+        mediaGet: {
+            params: ['id'],
+            sql: `
+                SELECT id, user_id, properties 
+                FROM ${tableName('medias')}
+                WHERE id = $1;`,
+        },
+        mediaUpdate: {
+            params: ['id', 'user_id', 'properties'],
+            sql: `
+                UPDATE ${tableName('medias')}
+                SET (id, properties) = ($1, $3) 
+                WHERE id = $1 AND user_id = $2 
+                RETURNING *;`,
+        },
+        mediaCreate: {
+            params: ['id', 'user_id', 'properties'],
+            sql: `
+                INSERT INTO ${tableName('medias')}
+                    (id, user_id, properties)
+                VALUES
+                    ($1, $2, $3)
+                RETURNING *;`,
+        },
+
+        // tags
+        tagLoad: {
+            params: [],
+            sql: `
+                SELECT id, user_id, name 
+                FROM ${tableName('tags')};`,
+        },
+        tagGet: {
+            params: ['id'],
+            sql: `
+                SELECT id, user_id, name 
+                FROM ${tableName('tags')}
+                WHERE id = $1;`,
+        },
+        tagUpdate: {
+            params: ['id', 'user_id', 'name'],
+            sql: `
+                UPDATE ${tableName('tags')}
+                SET (id, properties) = ($1, $3) 
+                WHERE id = $1 AND user_id = $2
+                RETURNING *;`,
+        },
+        tagCreate: {
+            params: ['id', 'user_id', 'name'],
+            sql: `
+                INSERT INTO ${tableName('tags')}
+                    (id, user_id, properties)
+                VALUES
+                    ($1, $2, $3)
+                RETURNING *;`,
+        },
 
     };
 
@@ -376,6 +441,6 @@ export default (prefix = '', schema = 'public'): IQueries => {
                 }
             }
             return null;
-        }
+        };
     return { sql };
 };

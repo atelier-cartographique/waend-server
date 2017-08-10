@@ -19,7 +19,7 @@ import { client as persistentClient } from './db';
 import { client as kvClient } from './store';
 import { client as indexerClient } from './indexer';
 import { Record, RecordType, record, ModelData, BaseModelData } from './models';
-import { QueryResult } from "pg";
+import { QueryResult } from 'pg';
 
 const logger = debug('waend:cache');
 
@@ -34,9 +34,9 @@ type RejectFn = (a: Error) => void;
 
 const getFromPersistent: (a: RecordType, b: string) => Promise<ModelData> =
     (objType, id) => {
-        const queryName = objType + 'Get',
-            typeHandler = record(objType),
-            params = [id];
+        const queryName = `${objType}Get`;
+        const typeHandler = record(objType);
+        const params = [id];
 
         const resolver: (a: ModelDataResolveFn, b: RejectFn) => void =
             (resolve, reject) => {
@@ -55,7 +55,7 @@ const getFromPersistent: (a: RecordType, b: string) => Promise<ModelData> =
             };
 
         return (new Promise(resolver));
-    }
+    };
 
 const queryPersistent: (a: string, b: RecordType, c: any[]) => Promise<ModelData[]> =
     (queryName, objType, params = []) => {
@@ -68,7 +68,7 @@ const queryPersistent: (a: string, b: RecordType, c: any[]) => Promise<ModelData
                     .then((result) => {
                         if (result.rowCount > 0) {
                             resolve(
-                                result.rows.map((row) => typeHandler.buildFromPersistent(row)));
+                                result.rows.map(row => typeHandler.buildFromPersistent(row)));
                         }
                         else {
                             reject(new Error('EmptyResultSet'));
@@ -78,7 +78,7 @@ const queryPersistent: (a: string, b: RecordType, c: any[]) => Promise<ModelData
             };
 
         return (new Promise(resolver));
-    }
+    };
 
 
 
@@ -92,11 +92,17 @@ const saveToPersistent: (a: RecordType, b: (ModelData | BaseModelData)) => Promi
         const params = rec.getParameters(prepObj);
 
         return persistentClient().query(queryName, params);
-    }
+    };
 
 
 
-
+interface IMap {
+    group: {
+        id: string;
+        layers: ModelData[]
+        [k: string]: any;
+    };
+}
 
 /**
  * A CacheItem is responsible for maintaining a connection between
@@ -108,9 +114,9 @@ const saveToPersistent: (a: RecordType, b: (ModelData | BaseModelData)) => Promi
 interface CacheItem {
     id: string;
     created: number;
-    reloadTimeoutID: null | number;
+    reloadTimeoutID: null | NodeJS.Timer;
     isActive: boolean;
-    data: any;
+    data: IMap | null;
     deps: string[];
     dirty: boolean;
 }
@@ -125,8 +131,8 @@ const cacheItem: (a: string) => CacheItem =
             data: null,
             deps: [],
             dirty: true,
-        }
-    }
+        };
+    };
 
 
 /**
@@ -134,18 +140,21 @@ const cacheItem: (a: string) => CacheItem =
  */
 const updateRecord: (a: CacheItem) => Promise<void> =
     (item) => {
-        const objString = JSON.stringify(item.data);
-        item.deps = item.data.group.layers.map((layer) => layer.id);
+        if (item.data) {
+            const objString = JSON.stringify(item.data);
+            item.deps = item.data.group.layers.map((layer) => layer.id);
 
-        return kvClient().put(item.id, objString)
-            .then(() => {
-                markClean(item);
-            })
-            .catch(logError('CacheItem.updateRecord'));
+            return kvClient().put(item.id, objString)
+                .then(() => {
+                    markClean(item);
+                })
+                .catch(logError('CacheItem.updateRecord'));
+        }
+        return Promise.reject(new Error('NullData'));
     };
 
 
-const getFeatures = (groupData: ModelData) => (lyr: ModelData) => {
+const getFeatures = (groupData: IMap) => (lyr: ModelData) => {
     const layerId: string = lyr.id;
     const queries: Promise<QueryResult>[] = [];
     const records: Record[] = [];
@@ -176,17 +185,17 @@ const getFeatures = (groupData: ModelData) => (lyr: ModelData) => {
 
 
 
-const getCompositions = (item: CacheItem, groupData: ModelData) => (result: QueryResult) => {
-    if (result.rowCount > 0) {
+const getCompositions = (item: CacheItem) => (result: QueryResult) => {
+    if (result.rowCount > 0 && item.data) {
         return (
             Promise
-                .map(result.rows, (composition) =>
+                .map(result.rows, composition =>
                     getFromPersistent(RecordType.Layer, composition.layer_id))
-                .map(getFeatures(groupData))
+                .map(getFeatures(item.data))
                 .then(() => { updateRecord(item); }));
     }
     return updateRecord(item);
-}
+};
 
 /**
  * load data from persistent storage and insert it in a kv store
@@ -195,22 +204,25 @@ const getCompositions = (item: CacheItem, groupData: ModelData) => (result: Quer
  */
 const loadItem: (a: CacheItem) => Promise<void> =
     (item) => {
-        item.data = {};
         item.dirty = true;
 
         const getGroup = (group: ModelData) => {
-            item.data.group = group;
-            item.data.group.layers = [];
+            item.data = {
+                group: {
+                    layers: [],
+                    ...group,
+                },
+            };
             return (
                 persistentClient()
                     .query('compositionGetForGroup', [item.id])
                     .catch(logError('CacheItem.load.getGroup')));
-        }
+        };
 
         return (
             getFromPersistent(RecordType.Group, item.id)
                 .then(getGroup)
-                .then(getCompositions(item, item.data))
+                .then(getCompositions(item))
                 .catch(logError('CacheItem.load')));
     };
 
@@ -229,7 +241,7 @@ const markDirty: (a: CacheItem) => void =
         if (item.reloadTimeoutID !== null) {
             clearTimeout(item.reloadTimeoutID);
         }
-        this.reloadTimeoutID = setTimeout(() => { loadItem(item); }, 1000 * 60);
+        item.reloadTimeoutID = setTimeout(() => { loadItem(item); }, 1000 * 60);
     };
 
 const markClean: (a: CacheItem) => void =
@@ -255,7 +267,7 @@ const itemLoader = (item: CacheItem) => {
 enum CacheStoreAction {
     Create,
     Update,
-    Delete
+    Delete,
 }
 
 interface ICacheStore {
@@ -267,20 +279,18 @@ const CacheStore: () => ICacheStore =
     () => {
         const storedGroups = new Map<string, CacheItem>();
 
-
         const get = (gid: string) => {
             logger(`CacheStore.get ${gid}`);
-            let item;
-            if (storedGroups.has(gid)) {
+            let item = storedGroups.get(gid);
+            if (item) {
                 logger('Is In Store');
-                item = storedGroups.get(gid);
                 if (!item.dirty) {
                     logger('Is Clean');
                     return Promise.resolve(item);
                 }
                 else {
                     logger('Is Dirty');
-                    itemLoader(item);
+                    return itemLoader(item);
                 }
             }
             else {
@@ -292,8 +302,8 @@ const CacheStore: () => ICacheStore =
         };
 
 
-        const dirtyDeps = (objType: RecordType, data: ModelData, groups: any[]) => {
-            let layerId;
+        const dirtyDeps = (objType: RecordType, data: ModelData, groups: string[]) => {
+            let layerId: string;
             if (RecordType.Layer === objType) {
                 layerId = data.id;
             }
@@ -310,13 +320,13 @@ const CacheStore: () => ICacheStore =
                     logger('Mark Dirty', gid);
                 }
             });
-        }
+        };
 
-        const actionCreate = (objType: RecordType, data: ModelData, groups: any[]) => {
+        const actionCreate = (objType: RecordType, data: ModelData, groups: string[]) => {
             if (RecordType.Composition === objType) {
-                if (storedGroups.has(data.group_id)) {
+                const citem = storedGroups.get(data.group_id);
+                if (citem) {
                     const lid = data.layer_id;
-                    const citem = storedGroups.get(data.group_id);
                     citem.deps.push(lid);
                     markDirty(citem);
                     logger('Mark Dirty', data.group_id);
@@ -327,10 +337,11 @@ const CacheStore: () => ICacheStore =
             }
         };
 
-        const actionUpdate = (objType: RecordType, data: ModelData, groups: any[]) => {
+        const actionUpdate = (objType: RecordType, data: ModelData, groups: string[]) => {
             if (RecordType.Group === objType) {
-                if (storedGroups.has(data.id)) {
-                    markDirty(storedGroups.get(data.id));
+                const citem = storedGroups.get(data.id);
+                if (citem) {
+                    markDirty(citem);
                 }
                 groups.push(data.id);
             }
@@ -340,14 +351,16 @@ const CacheStore: () => ICacheStore =
         };
 
 
-        const actionDelete = (objType: RecordType, data: ModelData, groups: any[]) => {
+        const actionDelete = (objType: RecordType, data: ModelData, groups: string[]) => {
             if (RecordType.Composition === objType) {
                 if (storedGroups.has(data.group_id)) {
                     const lid = data.layer_id;
                     const citem = storedGroups.get(data.group_id);
-                    citem.deps = citem.deps.filter((id) => id !== lid);
-                    markDirty(citem);
-                    logger('Mark Dirty', data.group_id);
+                    if (citem) {
+                        citem.deps = citem.deps.filter(id => id !== lid);
+                        markDirty(citem);
+                        logger('Mark Dirty', data.group_id);
+                    }
                 }
             }
             else {
@@ -357,7 +370,7 @@ const CacheStore: () => ICacheStore =
 
         const updateGroups = (objType: RecordType, action: CacheStoreAction, data: ModelData) => {
             logger('CacheStore.updateGroups', objType);
-            const groups = [];
+            const groups: string[] = [];
             switch (action) {
                 case CacheStoreAction.Create:
                     actionCreate(objType, data, groups);
@@ -375,7 +388,7 @@ const CacheStore: () => ICacheStore =
         };
 
         return { get, update: updateGroups };
-    }
+    };
 
 
 
@@ -384,7 +397,7 @@ export interface ICache {
     set(a: RecordType, b: BaseModelData | ModelData): Promise<ModelData>;
     setFeature(b: BaseModelData | ModelData): Promise<ModelData>;
     delFeature(a: string, b: string, c: string): Promise<void>;
-    delComposition(a: string): Promise<void>;
+    delComposition(a: string, b: string): Promise<void>;
     getGroup(a: string): Promise<string>;
     lookupGroups(a: string): Promise<ModelData[]>;
     query(a: string, b: RecordType, c: any[]): Promise<ModelData[]>;
@@ -406,7 +419,7 @@ const Cache: () => ICache =
 
             const resolver = (resolve: (a: ModelData) => void) => {
                 saveToPersistent(objType, obj)
-                    .then(function (res) {
+                    .then((res) => {
                         if (res.rowCount > 0) {
                             const newObj = record(objType)
                                 .buildFromPersistent(res.rows[0]);
@@ -438,14 +451,11 @@ const Cache: () => ICache =
 
 
         const delFeature = (lid: string, fid: string, geomType: string) => {
-            const resolver = (resolve: () => void, reject) => {
-                let featureType: RecordType;
+            const resolver = (resolve: () => void, reject: RejectFn) => {
                 let queryName: string;
+                let featureType: RecordType = RecordType.Entity;
 
-                if ('point' === geomType) {
-                    featureType = RecordType.Entity;
-                }
-                else if ('linestring' === geomType) {
+                if ('linestring' === geomType) {
                     featureType = RecordType.Path;
                 }
                 else if ('polygon' === geomType) {
@@ -459,25 +469,28 @@ const Cache: () => ICache =
                         cacheStore.update(featureType, CacheStoreAction.Delete, {
                             id: fid,
                             layer_id: lid,
-                            properties: {}
+                            properties: {},
                         });
                     })
                     .catch(reject);
+
             };
 
             return new Promise<void>(resolver);
         };
 
 
-        const delComposition = (id: string) => {
-            const resolver = (resolve: () => void, reject) => {
+        const delComposition = (groupId: string, layerId: string) => {
+            const resolver = (resolve: () => void, reject: RejectFn) => {
                 persistentClient()
-                    .query('compositionDelete', [id])
-                    .then(function () {
+                    .query('compositionDelete', [groupId, layerId])
+                    .then(() => {
                         resolve();
                         cacheStore.update(RecordType.Composition, CacheStoreAction.Delete, {
-                            id: id,
-                            properties: {}
+                            layer_id: layerId,
+                            group_id: groupId,
+                            id: 'xxxx',
+                            properties: {},
                         });
                     })
                     .catch(reject);
@@ -488,7 +501,7 @@ const Cache: () => ICache =
 
 
         const getGroup = (gid: string) => {
-            const resolver = (resolve: (a: string) => void, reject) => {
+            const resolver = (resolve: (a: string) => void, reject: RejectFn) => {
                 cacheStore
                     .get(gid)
                     .then(getJSON)
@@ -500,7 +513,7 @@ const Cache: () => ICache =
 
 
         const lookupGroups = (term: string) => {
-            const transform = (result) => {
+            const transform = (result: any) => {
                 const response = result.response;
                 const docs: any[] = response.docs;
                 const objs: Promise<ModelData>[] = docs.reduce((acc, doc) => {
@@ -523,7 +536,7 @@ const Cache: () => ICache =
 
         const query = (qname: string, type: RecordType, args: any[]) => {
             return queryPersistent(qname, type, args);
-        }
+        };
 
 
         return {
@@ -534,7 +547,7 @@ const Cache: () => ICache =
             delComposition,
             getGroup,
             lookupGroups,
-            query
+            query,
         };
     };
 
@@ -542,5 +555,7 @@ const Cache: () => ICache =
 export const client = function () {
     return Cache();
 };
+
+export default client;
 
 logger('module loaded');

@@ -9,129 +9,131 @@
  */
 
 
-var _ = require('underscore'),
-    base = require('./base'),
-    cache = require('../../lib/cache'),
-    notifier = require('../../lib/notifier');
+import { HandlerSet, EndpointSet, ApiHandler } from './index';
+import { client } from '../../lib/cache';
+import { notifyUpdate, notifyCreate, notifyDelete } from '../../lib/notifier';
 
 
-module.exports = exports = base.RequestHandler.extend({
+const handlers: HandlerSet = {
+
+    // list: function (request, response) {
+    //     const self = this,
+    //         bounds = _.mapObject(_.pick(request.query, 'n', 'e', 's', 'w'), function(v){ return parseFloat(v); });
+    //     client()
+    //         .getFeatures(request.params.layer_id, bounds)
+    //         .then(function(results){
+    //             self.paginate(results, request, response);
+    //         })
+    //         .catch(function(err){
+    //             response.status(500).send(err);
+    //         });
+    // },
+
+    // get: function (request, response) {
+    //     client()
+    //         .getFeature(request.params.feature_id)
+    //         .then(function(data){
+    //             response.send(data);
+    //         })
+    //         .catch(function(err){
+    //             response.status(404).send(err);
+    //         });
+    // },
 
 
-        endpoints: {
+    post(request, response) {
+        const layerId = request.params.layer_id;
+        const body = Object.assign({}, request.body, {
+            user_id: request.user.id,
+        });
 
-            list: {
-                verb: 'get',
-                handler: 'list',
-                url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/',
-                permissions: ['ownsGroupOrPublic']
-            },
-
-            get: {
-                verb: 'get',
-                handler: 'get',
-                url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/:feature_id',
-                permissions: ['ownsGroupOrPublic']
-            },
-
-            post: {
-                verb: 'post',
-                handler: 'post',
-                url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/',
-                permissions: ['isAuthenticated', 'isLayerOwner']
-            },
-
-            put: {
-                verb: 'put',
-                handler: 'put',
-                url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/:feature_id',
-                permissions: ['isAuthenticated', 'isLayerOwner']
-            },
-
-            del: {
-                verb: 'delete',
-                handler: 'del',
-                url: 'user/:user_id/group/:group_id/layer/:layer_id/feature.:geom_type/:feature_id',
-                permissions: ['isAuthenticated', 'isLayerOwner']
-            }
-        },
-
-
-        list: function (request, response) {
-            var self = this,
-                bounds = _.mapObject(_.pick(request.query, 'n', 'e', 's', 'w'), function(v){ return parseFloat(v); });
-            cache.client()
-                .getFeatures(request.params.layer_id, bounds)
-                .then(function(results){
-                    self.paginate(results, request, response);
-                })
-                .catch(function(err){
-                    response.status(500).send(err);
-                });
-        },
-
-        get: function (request, response) {
-            cache.client()
-                .getFeature(request.params.feature_id)
-                .then(function(data){
-                    response.send(data);
-                })
-                .catch(function(err){
-                    response.status(404).send(err);
-                });
-        },
-
-
-        post: function (request, response) {
-            var layerId = request.params.layer_id,
-                body = _.extend(request.body, {
-                    'user_id': request.user.id
-                });
-
-            cache.client()
-                .setFeature(body)
-                .then(function(feature){
-                    response.status(201).send(feature);
-                    notifier.create('layer', layerId, feature);
-                })
-                .catch(function(err){
-                    response.status(500).send(err);
-                });
-        },
-
-
-        put: function (request, response) {
-            var layerId = request.params.layer_id,
-                body = _.extend(request.body, {
-                'user_id': request.user.id,
-                'layer_id': layerId,
-                'id': request.params.feature_id
+        client()
+            .setFeature(body)
+            .then((feature) => {
+                response.status(201).send(feature);
+                notifyCreate('layer', layerId, feature);
+            })
+            .catch((err) => {
+                response.status(500).send(err);
             });
-            cache.client()
-                .setFeature(body)
-                .then(function(data){
-                    response.send(data);
-                    notifier.update('layer', layerId, data);
-                })
-                .catch(function(err){
-                    response.status(500).send(err);
-                });
-        },
+    },
 
-        del: function (request, response) {
-            var lid = request.params.layer_id,
-                fid = request.params.feature_id,
-                geomType = request.params.geom_type.toLowerCase();
 
-            cache.client()
-                .delFeature(lid, fid, geomType)
-                .then(function(){
-                    response.status(204).end();
-                    notifier.delete('layer', lid, fid);
-                })
-                .catch(function(err){
-                    response.status(500).send(err);
-                });
-        }
+    put(request, response) {
+        const layerId = request.params.layer_id;
+        const body = Object.assign({}, request.body, {
+            user_id: request.user.id,
+            layer_id: layerId,
+            id: request.params.feature_id,
+        });
+        client()
+            .setFeature(body)
+            .then((data) => {
+                response.send(data);
+                notifyUpdate('layer', layerId, data);
+            })
+            .catch((err) => {
+                response.status(500).send(err);
+            });
+    },
 
-    });
+    del(request, response) {
+        const lid = request.params.layer_id;
+        const fid = request.params.feature_id;
+        const geomType = request.params.geom_type.toLowerCase();
+
+        client()
+            .delFeature(lid, fid, geomType)
+            .then(() => {
+                response.status(204).end();
+                notifyDelete('layer', lid, fid);
+            })
+            .catch((err) => {
+                response.status(500).send(err);
+            });
+    }
+
+};
+
+const endpoints: EndpointSet<typeof handlers> = [
+    // endpoints: {
+
+    //         list: {
+    //             verb: 'get',
+    //             handler: 'list',
+    //             url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/',
+    //             permissions: ['ownsGroupOrPublic']
+    //         },
+
+    //         get: {
+    //             verb: 'get',
+    //             handler: 'get',
+    //             url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/:feature_id',
+    //             permissions: ['ownsGroupOrPublic']
+    //         },
+
+    {
+        verb: 'post',
+        handler: 'post',
+        url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/',
+        permissions: ['isAuthenticated', 'isLayerOwner'],
+    },
+
+    {
+        verb: 'put',
+        handler: 'put',
+        url: 'user/:user_id/group/:group_id/layer/:layer_id/feature/:feature_id',
+        permissions: ['isAuthenticated', 'isLayerOwner'],
+    },
+
+    {
+        verb: 'delete',
+        handler: 'del',
+        url: 'user/:user_id/group/:group_id/layer/:layer_id/feature.:geom_type/:feature_id',
+        permissions: ['isAuthenticated', 'isLayerOwner'],
+    },
+    //     },
+];
+
+export default { handlers, endpoints } as ApiHandler<typeof handlers>;
+

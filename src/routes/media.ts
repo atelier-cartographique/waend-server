@@ -8,157 +8,232 @@
  *
  */
 
-var logger = require('debug')('routes/media'),
-    _ = require('underscore'),
-    mkdirp = require('mkdirp'),
-    path = require('path'),
-    fs = require('fs'),
-    slugify = require('../lib/slugify'),
-    magick = require('imagemagick-native');
 
 
-var STEPS =
-[ 4,
-  8,
-  16,
-  32,
-  64,
-  128,
-  256,
-  512,
-  1024
-  ];
+import * as debug from 'debug';
+import { readFile, writeFile, exists } from 'fs';
+import { join } from 'path';
+import * as e from 'express';
+import * as multer from 'multer';
+import * as magick from 'imagemagick-native';
+import * as mkdirp from 'mkdirp';
+import cache from '../lib/cache';
+import { RecordType } from '../lib/models';
+import { paginate } from './endpoints/index';
 
-var STEPS_SZ = STEPS.length;
 
-function processFile (rootDir, file, done) {
-    logger('processFile', file);
-    var fileDir = path.join(rootDir, file.slug),
-        processed = 0;
+const logger = debug('waend:routes/media');
 
-    var fileWritten = function (err) {
-        processed += 1;
-        if (processed === STEPS_SZ) {
-            done(file.slug);
-        }
-    };
 
-    var fileConverted = function (step, err, buffer) {
-        logger('fileConverted', processed);
-        processed += 1;
-        if (err) { return; }
-        fs.writeFile(path.join(fileDir, step + '.png'), buffer, fileWritten);
-    };
+const ORIGINAL_NAME = 'orig';
+const FIELD_NAME = 'media';
 
-    var fileRed = function (err, data) {
-        logger('fileRed');
-        if (err) {
-            return done(false);
-        }
-        for (var i = 0; i < STEPS_SZ; i++) {
-            magick.convert({
-                'srcData': data,
-                'width': STEPS[i],
-                'height': STEPS[i],
-                'resizeStyle': 'aspectfit',
-                'format': 'PNG',
-                'strip': true
-            }, _.partial(fileConverted, STEPS[i]));
-        }
-    };
+const STEPS =
+    [
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        1024,
+    ];
 
-    var dirDone = function (err, made) {
-        logger('dirDone', err);
-        if (err) {
-            return done(false);
-        }
+type RejectFn = (e: Error) => void;
 
-        fs.readFile(file.path, fileRed);
-    };
-
-    mkdirp(fileDir, null, dirDone);
-}
-
-function uploadMedia (request, response) {
-    logger('uploadMedia', request.files);
-    if (request.files
-        && (request.files.length > 0)) {
-        var medias = request.files,
-            mediaDir = request.config.mediaDir,
-            user = request.user,
-            rootDir = path.join(mediaDir, user.id),
-            filesCount = medias.length,
-            urls = [];
-
-            var fileDone = function (url) {
-                logger('fileDone', url);
-                filesCount -= 1;
-                urls.push('/media/' + user.id +'/'+ url);
-                if (filesCount === 0) {
-                    response
-                        .status(201)
-                        .send({'urls': urls});
-                }
+const mkdir =
+    (path: string) => {
+        const resolver =
+            (resolve: (a: string) => void, reject: RejectFn) => {
+                mkdirp(path, (err, made) => {
+                    if (err) {
+                        return reject(err);
+                    }
+                    resolve(made);
+                });
             };
 
-            for (var i = 0; i < medias.length; i++) {
-                var media = medias[i],
-                    ext = path.extname(media.originalname),
-                    name = path.basename(media.originalname, ext);
-                media.slug = slugify(name);
-                processFile(rootDir, media, fileDone);
-            }
-    }
-}
-
-
-function listMedia (request, response) {
-    var userDir = path.basename(request.params.user_id),
-        rootDir = path.join(request.config.mediaDir, userDir);
-
-    var success = function (err, files) {
-        if (err) {
-            return response.status(404).end();
-        }
-        response.send({'medias': files});
+        return (new Promise(resolver));
     };
-    fs.readdir(rootDir, success);
-}
 
 
-function getStep (sz) {
-    for (var i = STEPS_SZ - 1; i >= 0; i--) {
-        if (sz >= STEPS[i]) {
-            return i;
-        }
-    }
-    return STEPS_SZ - 1;
-}
+// const getMediaInfo =
+//     (f: Express.Multer.File) => {
+//         const resolver =
+//             (resolve: (a: magick.IIdentifyResult) => void, reject: RejectFn) => {
+//                 magick.identify({
+//                     srcData: f.buffer,
+//                     ignoreWarnings: false,
+//                 }, (err, result) => {
+//                     if (err) {
+//                         return reject(err);
+//                     }
+//                     resolve(result);
+//                 })
+//             };
+//         return (new Promise(resolver));
+//     };
 
-function getMedia (request, response) {
-    var size = parseInt(request.params.size),
-        step = getStep(size),
-        userDir = path.basename(request.params.user_id),
-        mediaName = path.basename(request.params.media_name),
-        rootDir = path.join(request.config.mediaDir, userDir, mediaName);
 
-        logger('getMedia', size, step);
-        response.sendFile(path.join(rootDir, STEPS[step] + '.png'));
-}
 
-module.exports = exports = function(router, app){
+const resize =
+    (srcPath: string, destPath: string, step: number) => {
+        logger('resize', srcPath, step);
+        const options = {
+            width: STEPS[step],
+            height: STEPS[step],
+            resizeStyle: 'aspectfit',
+            format: 'PNG',
+            strip: true,
+        };
 
-    // GETs
-    router.get('/media/:user_id', listMedia);
-    router.get('/media/:user_id/:media_name/:size', getMedia);
+        const resolver =
+            (resolve: (path: string) => void, reject: RejectFn) => {
+                readFile(srcPath, (err, data) => {
+                    if (err) {
+                        return reject(err);
+                    }
+                    magick.convert({ srcData: data, ...options }, (err, result) => {
+                        if (err) {
+                            return reject(err);
+                        }
+                        writeFile(destPath, result, (err) => {
+                            if (err) {
+                                return reject(err);
+                            }
+                            resolve(destPath);
+                        });
+                    });
+                });
+            };
 
-    // POSTs
-    router.post('/media',  function(request, response){
-        if (request.isAuthenticated()) {
-            uploadMedia(request, response);
-        }
-        else {
-            response.sendStatus(403);
-        }
-    });
-};
+        return (new Promise(resolver));
+
+    };
+
+
+const listMedia =
+    (request: e.Request, response: e.Response) => {
+        const userId = request.params.user_id;
+        cache()
+            .query('mediaList', RecordType.Media, [userId])
+            .then((results) => {
+                paginate(results, request, response);
+            })
+            .catch((err) => {
+                response.status(500).send(err);
+            });
+    };
+
+
+const getStep =
+    (sz: number) => {
+        const step = STEPS.reduce((acc, v) => {
+            if (acc < 0) {
+                if (sz < v) {
+                    return acc;
+                }
+            }
+            return acc;
+        }, -1);
+
+        return step;
+    };
+
+const getMedia =
+    (rootDir: string) =>
+        (request: e.Request, response: e.Response) => {
+            const size = parseInt(request.params.size, 10);
+            const userId = request.params.user_id;
+            const mediaId = request.params.media_id;
+            const step = getStep(size);
+            const fn = step > 0 ? `${step}.png` : ORIGINAL_NAME;
+            const path = join(rootDir, userId, mediaId, fn);
+
+            cache()
+                .get(RecordType.Media, mediaId)
+                .then((rec) => {
+                    if (rec.user_id === userId) {
+                        exists(path, (itExists) => {
+                            if (itExists) {
+                                return response.sendFile(path);
+                            }
+                            const orig = join(rootDir, userId, mediaId, ORIGINAL_NAME);
+                            if (orig === path) {
+                                return response.sendStatus(400);
+                            }
+                            resize(orig, path, step)
+                                .then(() => response.sendFile(path))
+                                .catch(err => response.status(500).send(err));
+                        });
+                    }
+                    else {
+                        response.sendStatus(404);
+                    }
+                })
+                .catch(() => response.sendStatus(404));
+
+        };
+
+const recordMedia =
+    (userId: string, f: Express.Multer.File) => {
+        return (
+            cache()
+                .set(RecordType.Media, {
+                    user_id: userId,
+                    properties: {
+                        mimetype: f.mimetype,
+                        originalname: f.originalname,
+                        filesize: f.size,
+                    },
+                })
+        );
+    };
+
+const storage =
+    (rootDir: string) => {
+        return multer.diskStorage({
+            destination(req, file, callback) {
+                recordMedia(req.user.id, file)
+                    .then(rec => mkdir(join(rootDir, req.user.id, rec.id)))
+                    .then(dest => callback(null, dest))
+                    .catch(err => callback(err, ''));
+            },
+
+            filename() { return ORIGINAL_NAME; },
+        });
+    };
+
+const configure =
+    (router: e.Router, app: e.Application) => {
+        const uploadDir: string = app.locals.mediaDir;
+        logger(uploadDir);
+        const dest = uploadDir ? uploadDir : join(__dirname, '../../uploads');
+        const multerMiddleware = multer({ storage: storage(dest) }).array(FIELD_NAME);
+
+        // GETs
+        router.get('/media/:user_id', listMedia);
+        router.get('/media/:user_id/:media_id/:size', getMedia(dest));
+
+        // POST
+        router.post('/media',
+            (request, response, next) => {
+                if (request.isAuthenticated()) {
+                    next();
+                }
+                else {
+                    response.sendStatus(403);
+                }
+            },
+            multerMiddleware,
+            (_request, response) => {
+                response.sendStatus(201);
+            },
+        );
+    };
+
+export default configure;
+
+logger('loaded');

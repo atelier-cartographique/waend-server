@@ -55,14 +55,14 @@ const comparePassword: (a: string) => (b: QueryResult) => Promise<string> =
 export type DoneFn = (a: Error | null, b: ModelData | null) => void;
 
 export const verify = (email: string, password: string, done: DoneFn) => {
-    const resolve = (result) => {
+    const resolve = (result: any) => {
         if (result) {
             return done(null, result);
         }
         return done(new Error('wrong credentials'), null);
     };
 
-    const reject = function (err) {
+    const reject = function (err: any) {
         return done(new Error(err), null);
     };
 
@@ -71,20 +71,17 @@ export const verify = (email: string, password: string, done: DoneFn) => {
             .query('authGetEmail', [email])
             .then(comparePassword(password))
             .then(getAuthenicatedUser)
-            .then((result) => result.rows[0])
+            .then(result => result.rows[0])
             .then(resolve)
             .catch(reject));
 };
 
 
 const createUser = (name: string) => (qr: QueryResult) => {
-    const auth_id = qr.rows[0].id,
-        user = {
-            auth_id: auth_id,
-            properties: {
-                name: name
-            }
-        };
+    const user = {
+        auth_id: qr.rows[0].id,
+        properties: { name },
+    };
     return cache().set(RecordType.User, user);
 };
 

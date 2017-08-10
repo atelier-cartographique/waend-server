@@ -8,49 +8,25 @@
  *
  */
 
-const express = require('express');
-const login = require('./login');
-const api = require('./api');
-const media = require('./media');
-const config = require('./config');
-
-module.exports = function configure(app) {
-    const router = express.Router();
-
-    login(router, app);
-    api(router, app);
-    media(router, app);
-    config(router, app);
-
-    /* GET home page. */
-    router.get('/', (req, res) => {
-        res.redirect('/map');
-    });
-
-    router.get('/console*', (request, response) => {
-        response.render('console');
-    });
-
-    router.get('/view*', (request, response) => {
-        response.render('view');
-    });
-
-    router.get('/embed*', (request, response) => {
-        response.render('embed');
-    });
-
-    router.get('/map*', (request, response) => {
-        if (request.isAuthenticated()) {
-            response.render('map', {
-                user: request.user,
-            });
-        } else {
-            response.render('map', {
-                user: null,
-            });
-        }
-    });
+import * as express from 'express';
+import config from './config';
+import login from './login';
+import api from './api';
+import media from './media';
+import applications from './applications';
 
 
-    app.use('/', router);
-};
+const configure =
+    (app: express.Application) => {
+        const router = express.Router();
+
+        config(router, app);
+        login(router);
+        api(router);
+        media(router, app);
+        applications(app.locals.applications, router);
+
+        app.use(router);
+    };
+
+export default configure;

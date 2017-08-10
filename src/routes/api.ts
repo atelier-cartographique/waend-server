@@ -9,56 +9,39 @@
  */
 
 
+import * as debug from 'debug';
+import * as e from 'express';
+import { permissions as permissionHandlers } from './endpoints/permissions';
+import user from './endpoints/user';
+import group from './endpoints/group';
+import layer from './endpoints/layer';
+import feature from './endpoints/feature';
 
-var logger = require('debug')('routes/api'),
-    _ = require('underscore'),
-    handlers = require('./endpoints/');
-
-var root = '/api/v1/';
-
-
-function listHandlers(){
-    logger('>> listHandlers', handlers.length);
-    var ret = {};
-    _.each(handlers, function(handler){
-        logger('>> service', handler.modelName);
-        ret[handler.modelName] = handler.getEndpoints();
-    });
-
-    return ret;
-}
+const logger = debug('waend:api');
+const rootV1 = '/api/v1/';
 
 
-function service(req, res){
-    res.json(listHandlers());
-}
+const configure =
+    (router: e.Router) => {
 
-module.exports = exports = function(router, app){
+        [
+            user,
+            group,
+            layer,
+            feature,
+        ].forEach((api) => {
+            const handlers = api.handlers;
+            api.endpoints.forEach((endpoint) => {
+                const { verb, handler, permissions } = endpoint;
+                const route = router[verb].bind(router);
+                const handlerMethod = handlers[handler];
+                const perms = permissions.map(perm => permissionHandlers[perm]);
 
-    router.get(root, service);
-
-    _.each(handlers, function(handler){
-
-        var endpoints = handler.getEndpoints(true);
-
-        _.each(endpoints, function(endpoint, name){
-            var args = [],
-                routing = router[endpoint.verb],
-                endpointUrl = root + endpoint.url,
-                endpointHandler = _.bind(handler[endpoint.handler], handler);
-
-            args.push(endpointUrl);
-
-            if('permissions' in endpoint){
-                for(var pidx = 0; pidx < endpoint.permissions.length; pidx++){
-                    var permissionName = endpoint.permissions[pidx];
-                    args.push(_.bind(handler[permissionName], handler));
-                }
-            }
-
-            args.push(endpointHandler);
-            routing.apply(router, args);
+                route(`${rootV1}${endpoint.url}`, ...perms, handlerMethod);
+            });
         });
+    };
 
-    });
-};
+export default configure;
+
+logger('loaded');

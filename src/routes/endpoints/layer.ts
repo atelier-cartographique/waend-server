@@ -8,112 +8,111 @@
  *
  */
 
-var _ = require('underscore'),
-    base = require('./base'),
-    cache = require('../../lib/cache'),
-    notifier = require('../../lib/notifier');
+import { HandlerSet, EndpointSet, ApiHandler } from './index';
+import { client } from '../../lib/cache';
+import { RecordType } from '../../lib/models';
+import { notifyUpdate, notifyCreate } from '../../lib/notifier';
 
+const handlers: HandlerSet = {
+    // list: function (request, response) {
+    //     const self = this;
+    //     client()
+    //         .getLayers(request.params.group_id)
+    //         .then(function(results){
+    //             self.paginate(results, request, response);
+    //         })
+    //         .catch(function(err){
+    //             response.status(500).send(err);
+    //         });
+    // },
 
-module.exports = exports = base.RequestHandler.extend({
-
-
-    endpoints: {
-
-        list: {
-            verb: 'get',
-            handler: 'list',
-            url: 'user/:user_id/group/:group_id/layer/',
-            permissions: ['ownsGroupOrPublic']
-        },
-
-        get: {
-            verb: 'get',
-            handler: 'get',
-            url: 'user/:user_id/group/:group_id/layer/:layer_id',
-            permissions: ['ownsGroupOrPublic']
-        },
-
-        post: {
-            verb: 'post',
-            handler: 'post',
-            url: 'user/:user_id/group/:group_id/layer/',
-            permissions: ['isAuthenticated', 'ownsGroupOrPublic']
-        },
-
-        put: {
-            verb: 'put',
-            handler: 'put',
-            url: 'user/:user_id/group/:group_id/layer/:layer_id',
-            permissions: ['isAuthenticated', 'isLayerOwner']
-        }
-    },
-
-
-    list: function (request, response) {
-        var self = this;
-        cache.client()
-            .getLayers(request.params.group_id)
-            .then(function(results){
-                self.paginate(results, request, response);
-            })
-            .catch(function(err){
-                response.status(500).send(err);
-            });
-    },
-
-    get: function (request, response) {
-        cache.client()
-            .get('layer', request.params.layer_id)
-            .then(function(data){
+    get(request, response) {
+        client()
+            .get(RecordType.Layer, request.params.layer_id)
+            .then((data) => {
                 response.send(data);
             })
-            .catch(function(err){
+            .catch((err) => {
                 response.status(404).send(err);
             });
     },
 
 
-    post: function (request, response) {
-        var groupId = request.params.group_id,
-            body = _.extend(request.body, {
-                'user_id': request.user.id
-            });
+    post(request, response) {
+        const groupId: string = request.params.group_id;
+        const body = Object.assign({}, request.body, {
+            user_id: request.user.id,
+        });
 
-        cache.client()
-            .set('layer', body)
-            .then(function(layer){
-                var compositionData = {
-                    'layer_id': layer.id,
-                    'group_id': groupId
+        client()
+            .set(RecordType.Layer, body)
+            .then((layer) => {
+                const compositionData = {
+                    layer_id: layer.id,
+                    group_id: groupId,
+                    properties: {},
                 };
-                cache.client()
-                    .set('composition', compositionData)
-                    .then(function(/* composition */){
+                client()
+                    .set(RecordType.Composition, compositionData)
+                    .then((/* composition */) => {
                         response.status(201).send(layer);
+                        notifyCreate('layer', groupId, layer);
                     });
             })
-            .catch(function(err){
+            .catch((err) => {
                 response.status(500).send(err);
             });
     },
 
 
-    put: function (request, response) {
-        var layerId = request.params.layer_id,
-            body = _.extend(request.body, {
-                'user_id': request.user.id,
-                'id': layerId
-            });
-        cache.client()
-            .set('layer', body)
-            .then(function(data){
+    put(request, response) {
+        const layerId = request.params.layer_id;
+        const body = Object.assign({}, request.body, {
+            user_id: request.user.id,
+            id: layerId,
+        });
+        client()
+            .set(RecordType.Layer, body)
+            .then((data) => {
                 response.send(data);
-                notifier.update('layer', layerId, data);
+                notifyUpdate('layer', layerId, data);
             })
-            .catch(function(err){
+            .catch((err) => {
                 response.status(500).send(err);
             });
     },
+};
 
 
-});
+const endpoints: EndpointSet<typeof handlers> = [
+    // {
+    //     verb: 'get',
+    //     handler: 'list',
+    //     url: 'user/:user_id/group/:group_id/layer/',
+    //     permissions: ['ownsGroupOrPublic'],
+    // },
+
+    {
+        verb: 'get',
+        handler: 'get',
+        url: 'user/:user_id/group/:group_id/layer/:layer_id',
+        permissions: ['ownsGroupOrPublic'],
+    },
+
+    {
+        verb: 'post',
+        handler: 'post',
+        url: 'user/:user_id/group/:group_id/layer/',
+        permissions: ['isAuthenticated', 'ownsGroupOrPublic'],
+    },
+
+    {
+        verb: 'put',
+        handler: 'put',
+        url: 'user/:user_id/group/:group_id/layer/:layer_id',
+        permissions: ['isAuthenticated', 'isLayerOwner'],
+    }
+];
+
+
+export default { handlers, endpoints } as ApiHandler<typeof handlers>;

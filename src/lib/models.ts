@@ -22,14 +22,12 @@ export interface BaseModelData {
 }
 
 export interface ModelData extends BaseModelData {
-    id: string,
+    id: string;
 }
 
 
 
 export class Record {
-    parse = JSON.parse;
-    stringify = JSON.stringify;
 
     parameters: string[];
 
@@ -56,7 +54,7 @@ export class Record {
         const p = this.parameters;
         const initial: ModelData = {
             properties: {},
-            id: row.id
+            id: row.id,
         };
         return (p.reduce<ModelData>((acc, key) => {
             if ('geom' === key) {
@@ -73,31 +71,39 @@ export class Record {
 
 
 export class Entity extends Record {
-    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
+    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom']
 }
 
 export class Path extends Record {
-    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
+    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom']
 }
 
 export class Spread extends Record {
-    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
+    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom']
 }
 
 export class Layer extends Record {
-    parameters = ['id', 'user_id', 'properties'];
+    parameters = ['id', 'user_id', 'properties']
 }
 
 export class User extends Record {
-    parameters = ['id', 'auth_id', 'properties'];
+    parameters = ['id', 'auth_id', 'properties']
 }
 
 export class Composition extends Record {
-    parameters = ['id', 'layer_id', 'group_id'];
+    parameters = ['id', 'layer_id', 'group_id']
 }
 
 export class Group extends Record {
-    parameters = ['id', 'user_id', 'status_flag', 'properties'];
+    parameters = ['id', 'user_id', 'status_flag', 'properties']
+}
+
+export class Media extends Record {
+    parameters = ['id', 'user_id', 'properties']
+}
+
+export class Tag extends Record {
+    parameters = ['id', 'user_id', 'name']
 }
 
 
@@ -110,6 +116,8 @@ export enum RecordType {
     Spread,
     Path,
     Entity,
+    Media,
+    Tag,
 }
 
 
@@ -130,5 +138,9 @@ export const record: (a: RecordType) => Record =
                 return (new Path());
             case RecordType.Entity:
                 return (new Entity());
+            case RecordType.Media:
+                return (new Media());
+            case RecordType.Tag:
+                return (new Tag());
         }
-    }
+    };

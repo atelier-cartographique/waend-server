@@ -46,9 +46,9 @@ const MemoryStore: () => IStore =
         };
 
         return { put, get };
-    }
+    };
 
-type RedisCallback = redis.ResCallbackT<string>;
+type RedisCallback = redis.Callback<string>;
 type RedisResolveKey = (a: string) => void;
 type RedisResolveData = (a: string) => void;
 type RedisReject = (a: Error) => void;
@@ -66,7 +66,7 @@ const RedisStore: (a: number, b?: string) => IStore =
                     resolve(key);
                 };
                 redisClient.set(key, value, cb);
-            }
+            };
             return (new Promise(resolver));
         };
 
@@ -79,12 +79,12 @@ const RedisStore: (a: number, b?: string) => IStore =
                     resolve(r);
                 };
                 redisClient.get(key, cb);
-            }
+            };
             return (new Promise(resolver));
         };
 
         return { put, get };
-    }
+    };
 
 
 // type LevelCallback = (err: Error, r: string) => void;
@@ -114,10 +114,10 @@ const LevelStore: (a: string) => IStore =
                 });
             };
             return (new Promise(resolver));
-        }
+        };
 
         return { put, get };
-    }
+    };
 
 let store: IStore;
 
@@ -137,7 +137,7 @@ export const configure = (config: any) => {
             `
 Using a memory store for cache,
 may not be suitable for production use.
-`
+`,
         );
         store = MemoryStore();
     }

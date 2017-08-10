@@ -9,106 +9,113 @@
  */
 
 import * as debug from 'debug';
-import uuid from 'uuid';
-import * as sockjs from 'sockjs-node';
-import { put, get } from './token';
-import { ModelData } from "./models";
+import * as http from 'http';
+import * as uuid from 'uuid';
+import * as sockjs from 'sockjs';
+import { get } from './token';
+import { ModelData } from './models';
 
 const logger = debug('waend:notifier');
 
 
-const authUser = (state, uid, tok) => {
-    state.user = get(tok);
-};
-
-const subscribe = (state, type, id) => {
-    if (!(type in state.channels)) {
-        state.channels[type] = [];
-    }
-    state.channels[type].push(id);
-    state.channels[type] = _.uniq(state.channels[type]);
-};
 
 interface IHandlers {
     auth(a: IState, b: string, c: string): void;
     sub(a: IState, b: string, c: string): void;
 }
 
-const handlers: IHandlers = {
-    auth: authUser,
-    sub: subscribe
-};
 
-export enum ChanType {
-    user,
-    group,
-    layer,
-    feature,
-}
+export type ChanType =
+    | 'user'
+    | 'group'
+    | 'layer'
+    | 'feature'
+    ;
 
-export interface IPack {
-    id: string;
-    type: string;
-}
 
 export interface IChannel {
     id: string;
     type: ChanType;
-    getPack(): IPack;
 }
-
-export const Channel = (type: ChanType, id: string) => {
-    return {
-        getPack() { return { type: ChanType[type], id }; },
-        type,
-        id,
-    }
-}
-
-
-/////////////////
-// few helpers //
-/////////////////
-
-
-export const update = (chanType: ChanType, chanId: string, data: any) => {
-    const chan = Channel(chanType, chanId);
-    sendChannel(chan, 'update', data);
-};
-
-module.exports.create = function (chanType, chanId, data) {
-    const chan = new Channel(chanType, chanId);
-    exports.sendChannel(chan, 'create', data);
-};
-
-module.exports.delete = function (chanType, chanId, id) {
-    const chan = new Channel(chanType, chanId);
-    exports.sendChannel(chan, 'delete', id);
-};
-
-type ChannelMap = Map<ChanType, IChannel>;
 
 interface IState {
+    readonly id: string;
     setUser(a: ModelData): void;
-    getChannels(): ChannelMap;
+    getUser(): ModelData | null;
+    getChannels(): IChannel[];
+    write: (a: string) => void;
 }
 
-const State: (a: sockjs.Connection, b: (c: IState) => void) => IState =
-    (sock, done) => {
-        const id = uuid.v4();
-        const channels = new Map<ChanType, IChannel>();
-        let ready = false;
-        let user: ModelData = null;
+interface IStateVec {
+    each: (fn: (a: IState) => void) => void;
+    eachChannel: (chan: IChannel, fn: (a: IState) => void) => void;
+    eachUser: (uid: string, fn: (a: IState) => void) => void;
+    removeState: (state: IState) => void;
+    create: (sock: sockjs.Connection) => IState;
+}
 
-        const reference = {
+type IStateVecCb = (a: IStateVec) => void;
+type IStateVecFn = (a: IStateVecCb) => void;
+
+const authUser =
+    (state: IState, _uid: string, tok: string) => {
+        const user = get(tok);
+        if (user) {
+            state.setUser(user);
+        }
+    };
+
+const subscribe =
+    (state: IState, type: ChanType, id: string) => {
+        const channels = state.getChannels();
+        const hasChannel = channels.findIndex(c => c.type === type && c.id === id);
+        if (hasChannel < 0) {
+            channels.push(createChannel(type, id));
+        }
+    };
+
+const handlers: IHandlers = {
+    auth: authUser,
+    sub: subscribe,
+};
+
+export const createChannel =
+    (type: ChanType, id: string) => {
+        return {
+            type,
+            id,
+        };
+    };
+
+
+
+
+
+const createState: (a: sockjs.Connection, b: (c?: IState) => void) => IState =
+    (sock, done) => {
+        const channels: IChannel[] = [];
+        let user: ModelData | null = null;
+
+        const reference: IState = {
+            id: uuid.v4(),
+
             setUser(u: ModelData) {
                 user = u;
             },
 
+            getUser() {
+                return user;
+            },
+
             getChannels() {
                 return channels;
-            }
-        }
+            },
+
+            write(msg: string) {
+                sock.write(msg);
+            },
+        };
+
 
         const dispatch = (name: string, arg0: string, arg1: string) => {
             switch (name) {
@@ -129,118 +136,124 @@ const State: (a: sockjs.Connection, b: (c: IState) => void) => IState =
             done(reference);
         });
 
-        sock.on('data', function (message) {
+        sock.on('data', (message) => {
             let data;
             try {
                 data = JSON.parse(message);
             }
             catch (e) {
-                sock.close(400, 'Expect well formed JSON data string');
-                that.done();
+                sock.close('400', 'Expect well formed JSON data string');
+                done();
                 return;
             }
 
-            dispatch(data);
+            if (Array.isArray(data) && data.length === 3) {
+                dispatch(data[0], data[0], data[1]);
+            }
         });
 
         return reference;
     };
 
-function StateVec() {
-    this.states = [];
-    this.freeIndex = [];
-}
 
-StateVec.prototype.eachChannel = function (chan, fn, ctx) {
-    const states = this.states;
-    for (const i = 0; i < states.length; i++) {
-        if (states[i]) {
-            const state = states[i],
-                channels = state.channels;
-            if (chan.type in channels) {
-                if (_.indexOf(channels[chan.type], chan.id) >= 0) {
-                    fn.call(ctx, state);
+const nonNull =
+    <T>(vs: (T | null)[]): T[] => {
+        return (vs.filter(v => v !== null)) as T[];
+    };
+
+const stateVec =
+    (): IStateVec => {
+        const states: (IState | null)[] = [];
+        const freeIndex: number[] = [];
+
+
+        const eachChannel =
+            (chan: IChannel, fn: (a: IState) => void) => {
+                const { type, id } = chan;
+                nonNull(states)
+                    .forEach((state) => {
+                        const idx = state.getChannels().findIndex(c => c.type === type && c.id === id);
+                        if (idx >= 0) {
+                            fn(state);
+                        }
+                    });
+            };
+
+        const eachUser =
+            (uid: string, fn: (a: IState) => void) => {
+                nonNull(states)
+                    .forEach((state) => {
+                        const user = state.getUser();
+                        if (user && user.id === uid) {
+                            fn(state);
+                        }
+                    });
+            };
+
+        const each =
+            (fn: (a: IState) => void) => {
+                nonNull(states).forEach(fn);
+            };
+
+
+        const removeState =
+            (state: IState) => {
+                const { id } = state;
+                const idx = nonNull(states).findIndex(s => s.id === id);
+                if (idx) {
+                    states[idx] = null;
+                    freeIndex.push(idx);
                 }
-            }
+            };
+
+
+        const create =
+            (sock: sockjs.Connection) => {
+                const state = createState(sock, removeState);
+                const idx = freeIndex.pop();
+                if (idx) {
+                    states[idx] = state;
+                }
+                else {
+                    states.push(state);
+                }
+                return state;
+            };
+
+
+        return {
+            each,
+            eachChannel,
+            eachUser,
+            removeState,
+            create,
+        };
+
+    };
+
+
+let configured = false;
+let withStates: (null | IStateVecFn) = null;
+
+export const configure =
+    (server: http.Server, prefix: string) => {
+        if (configured) {
+            throw (new Error('Notify Server already in use'));
         }
-    }
-};
 
-StateVec.prototype.eachUser = function (uid, fn, ctx) {
-    const states = this.states;
-    for (const i = 0; i < states.length; i++) {
-        if (states[i]) {
-            const state = states[i],
-                id = state.user ? state.user.id : null;
-            if (uid === id) {
-                fn.call(ctx, state);
-            }
-        }
-    }
-};
+        const notifyServer = sockjs.createServer();
+        const states = stateVec();
+        withStates = (f) => { f(states); };
 
-StateVec.prototype.each = function (fn, ctx) {
-    const states = this.states;
-    for (const i = 0; i < states.length; i++) {
-        if (states[i]) {
-            const state = states[i];
-            fn.call(ctx, state);
-        }
-    }
-};
-
-
-StateVec.prototype.removeState = function (state) {
-    const id = state.id,
-        states = this.states,
-        idx = _.findIndex(states, function (s) {
-            if (s) {
-                return s.id === id;
-            }
+        notifyServer.on('connection', (sock) => {
+            states.create(sock);
         });
-    states[idx] = null;
-    this.freeIndex.push(idx);
-};
 
-StateVec.prototype.create = function (sock) {
-    const state = State(sock, this.removeState.bind(this));
-    if (this.freeIndex.length > 0) {
-        const idx = this.freeIndex.pop();
-        this.states[idx] = state;
-    }
-    else {
-        this.states.push(state);
-    }
-    return state;
-};
+        notifyServer.installHandlers(server, { prefix });
+        configured = true;
+    };
 
 
-
-
-
-
-let notifyServer: sockjs.Server;
-let states;
-
-module.exports.configure = function (server, prefix) {
-    if (notifyServer) {
-        throw (new Error('Notify Server already in use'));
-    }
-
-    notifyServer = sockjs.createServer();
-    states = new StateVec();
-    notifyServer.on('connection', function (sock) {
-        states.create(sock);
-    });
-
-    notifyServer.installHandlers(server, { prefix: prefix });
-};
-
-function checkNotifier() {
-    if (!notifyServer || !states) {
-        throw (new Error('Called Notify Server when not configured'));
-    }
-}
 
 // module.exports.broadcast = function (data){
 //     checkNotifier();
@@ -254,21 +267,40 @@ function checkNotifier() {
 //     states.each(notify);
 // };
 
-export const sendChannel = (chan: IChannel, ) {
-    checkNotifier();
-    const chan = arguments[0],
-        args = [chan.getPack()];
-    for (const i = 1; i < arguments.length; i++) {
-        args.push(arguments[i]);
-    }
+/////////////////
+// few helpers //
+/////////////////
 
-    const msg = JSON.stringify(args);
 
-    function notify(state) {
-        state.sock.write(msg);
-    }
+export const notifyUpdate =
+    (chanType: ChanType, chanId: string, data: ModelData) => {
+        const chan = createChannel(chanType, chanId);
+        sendChannel(chan, 'update', data);
+    };
 
-    states.eachChannel(chan, notify);
-};
+export const notifyCreate =
+    (chanType: ChanType, chanId: string, data: ModelData) => {
+        const chan = createChannel(chanType, chanId);
+        sendChannel(chan, 'create', data);
+    };
+
+export const notifyDelete =
+    (chanType: ChanType, chanId: string, id: string) => {
+        const chan = createChannel(chanType, chanId);
+        sendChannel(chan, 'delete', id);
+    };
+
+
+export const sendChannel =
+    (chan: IChannel, action: string, data: string | ModelData) => {
+        if (withStates) {
+            withStates((states) => {
+                const msg = JSON.stringify([chan, action, data]);
+                states.eachChannel(chan, (state) => {
+                    state.write(msg);
+                });
+            });
+        }
+    };
 
 logger('module loaded');

@@ -1,0 +1,14 @@
+{
+    "contributors": [
+        {
+            "name": "Pierre Marchand",
+            "url": "https://github.com/pierremarc"
+        }
+    ],
+    "dependencies": {
+        "@types/geojson": "^1.0.0"
+    },
+    "name": "@types/wellknown",
+    "typeScriptVersion": "2.0",
+    "version": "0.5.0"
+}

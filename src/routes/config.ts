@@ -8,15 +8,23 @@
  *
  */
 
-const config = require('../config');
+import * as e from 'express';
 
+interface PublicConfig {
+    [k: string]: string;
+}
 
-module.exports = function configure(router) {
-    router.get('/config/:key', (req, res) => {
-        const key = req.params.key;
-        res.set('Content-Type', 'application/javascript');
-        const configData = config.public || {};
-        const data = configData[key];
-        res.send(data);
-    });
-};
+const configure =
+    (router: e.Router, app: e.Application) => {
+        const publicData: PublicConfig = app.locals.public;
+        Object.keys(publicData)
+            .forEach((key: string) => {
+                router.get(`/config/${key}`, (_req, res) => {
+                    res.set('Content-Type', 'application/javascript');
+                    res.send(publicData[key]);
+                });
+            });
+    };
+
+export default configure;
+

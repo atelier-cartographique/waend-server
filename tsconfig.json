@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        // "project": "src",
+        "project": "src",
         "outDir": "js",
         "module": "commonjs",
         "moduleResolution": "node",

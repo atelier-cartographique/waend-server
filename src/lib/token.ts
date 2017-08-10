@@ -10,7 +10,7 @@
  */
 
 import * as debug from 'debug';
-import uuid from 'uuid';
+import * as uuid from 'uuid';
 import { ModelData } from "./models";
 
 const logger = debug('waend:token');
@@ -24,12 +24,12 @@ export interface IToken {
 const defaultExpire = 1000 * 60;
 const tokens = new Map<string, IToken>();
 
-const Token: (a: ModelData) => IToken =
+const token: (a: ModelData) => IToken =
     (user) => {
         return {
             id: uuid.v4(),
-            user: user,
             ts: Date.now(),
+            user
         }
 
     }
@@ -45,7 +45,7 @@ export const jsonToken = (token: IToken) => {
 
 
 export const put = (user: ModelData) => {
-    const t = Token(user);
+    const t = token(user);
     tokens.set(t.id, t);
     return t;
 };
@@ -53,8 +53,9 @@ export const put = (user: ModelData) => {
 export const get = (tokId: string) => {
     if (tokens.has(tokId)) {
         const tok = tokens.get(tokId);
-
-        return tok.user;
+        if (tok) {
+            return tok.user;
+        }
     }
 
     return null;

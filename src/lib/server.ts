@@ -9,105 +9,110 @@
  */
 
 
-var logger = require('debug')('lib/server'),
-    path = require('path');
-
-var express = require('express'),
-    favicon = require('static-favicon'),
-    logger = require('morgan'),
-    cookieParser = require('cookie-parser'),
-    session = require('express-session'),
-    RedisStore = require('connect-redis')(session),
-    bodyParser = require('body-parser'),
-    multer = require('multer');
-
-var passport = require('passport'),
-    Strategy = require('passport-local').Strategy,
-    cache = require('./cache'),
-    store = require('./store'),
-    auth = require('./auth');
 
 
+import { join } from 'path';
+import * as express from 'express';
+import * as morgan from 'morgan';
+import * as passport from 'passport';
+import * as favicon from 'serve-favicon';
+import * as bodyParser from 'body-parser';
+import * as cookieParser from 'cookie-parser';
+import * as session from 'express-session';
+import * as connectRedis from 'connect-redis';
+import * as http from 'http';
+import * as debug from 'debug';
+import { Strategy } from 'passport-local';
+import { verify } from './auth';
+import { RecordType, ModelData } from './models';
+import { client as cacheClient } from './cache';
 
-passport.serializeUser(function(user, done) {
+const logger = debug('waend:server');
+
+
+passport.serializeUser<ModelData, string>((user, done) => {
     done(null, user.id);
 });
 
-passport.deserializeUser(function(id, done) {
-    cache.client()
-        .get('user', id)
-        .then(function(user){
+passport.deserializeUser<ModelData, string>((id, done) => {
+    cacheClient()
+        .get(RecordType.User, id)
+        .then((user) => {
             done(null, user);
         })
-        .catch(function(err){
+        .catch(() => {
             done({
-                error: 'cannot find user'
+                error: 'cannot find user',
             });
         });
 });
 
-passport.use(new Strategy(auth.verify));
+passport.use(new Strategy(verify));
 
-module.exports = function(config){
 
-    config = config || {};
-    var app = express();
-    var multerMiddleware = multer({
-        'dest': config.uploadDir || path.join(__dirname, '../uploads')
-    }).array('media');
 
-    // view engine setup
-    app.set('views', config.views || path.join(__dirname, '../views'));
-    app.set('view engine', config.viewEngine || 'jade');
+export const configure =
+    (config: { [prop: string]: any }) => {
+        const app = express();
+        Object.keys(config)
+            .forEach((k) => {
+                app.locals[k] = config[k];
+                logger(`app.locals[${k}]`, config[k]);
+            });
 
-    app.use(favicon());
-    app.use(logger('dev'));
-    app.use(bodyParser.json({
-        'limit': config.bodyParserLimit || '400kb'
-    }));
-    app.use(bodyParser.urlencoded());
-    app.use(cookieParser());
-    app.use(express.static(config.static || path.join(__dirname, '../public')));
-    app.use(multerMiddleware);
 
-    if (!('session' in config)) {
-        console.error('We really need session support, update your config please');
-        process.exit(1);
-    }
-    var sessionConfig = {
-        'secret': config.session.secret || 'xxxxxxxxx',
-        resave: false,
-        saveUninitialized: true
+        // view engine setup
+        app.set('views', config.views || join(__dirname, '../views'));
+        app.set('view engine', config.viewEngine || 'jade');
+
+        app.use(favicon(join(__dirname, '../../favicon.ico')));
+        app.use(morgan('dev'));
+        app.use(bodyParser.json({
+            limit: config.bodyParserLimit || '400kb',
+        }));
+        app.use(bodyParser.urlencoded());
+        app.use(cookieParser());
+        app.use(express.static(config.static || join(__dirname, '../public')));
+
+        if (!('session' in config)) {
+            logger('We really need session support, update your config please');
+            return process.exit(1);
+        }
+
+        const sessionConfig: session.SessionOptions = {
+            secret: config.session.secret || 'xxxxxxxxx',
+            resave: false,
+            saveUninitialized: true,
+        };
+
+        if ('redis' in config.session) {
+            const rconfig = config.session.redis;
+            const redis = require('redis');
+            const rclient = redis.createClient(rconfig.port, rconfig.host);
+            const redisStore = connectRedis(session);
+            sessionConfig.store = new redisStore({
+                client: rclient,
+            });
+        }
+
+        app.use(session(sessionConfig));
+        app.use(passport.initialize());
+        app.use(passport.session());
+
+        app.set('port', process.env.PORT || config.port || 3000);
+
+        const start =
+            (postStart?: (a: Express.Application, b: http.Server) => void) => {
+                // app.use(fof);
+                const server = app.listen(app.get('port'), () => {
+                    logger('Express server listening on port ' + server.address().port);
+                    if (postStart) {
+                        postStart(app, server);
+                    }
+                });
+            };
+
+        return { app, start };
     };
-    if ('redis' in config.session) {
-        var rconfig = config.session.redis,
-            redis = require('redis'),
-            rclient = redis.createClient(rconfig.port, rconfig.host);
-        sessionConfig.store= new RedisStore({
-            client: rclient
-        });
-    }
 
-    app.use(session(sessionConfig));
-    app.use(passport.initialize());
-    app.use(passport.session());
-
-    app.use(function(request, response, next){
-        request.config = config;
-        next();
-    });
-
-    app.set('port', process.env.PORT || config.port || 3000);
-
-    app.start = function(postStart){
-        // app.use(fof);
-        var server = app.listen(app.get('port'), function(){
-            logger('Express server listening on port ' + server.address().port);
-            if(postStart){
-                postStart(app, server);
-            }
-        });
-    };
-
-    return app;
-};
+logger('loaded');

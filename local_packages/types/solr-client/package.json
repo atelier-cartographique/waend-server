@@ -1,0 +1,11 @@
+{
+    "contributors": [
+        {
+            "name": "Pierre Marchand",
+            "url": "https://github.com/pierremarc"
+        }
+    ],
+    "name": "@types/solr-client",
+    "typeScriptVersion": "2.0",
+    "version": "0.6.0"
+}
