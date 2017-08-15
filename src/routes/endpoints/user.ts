@@ -10,13 +10,12 @@
 
 import { HandlerSet, EndpointSet, ApiHandler } from './index';
 import { client } from '../../lib/cache';
-import { RecordType } from '../../lib/models';
 
 
 const handlers: HandlerSet = {
     get(request, response) {
         client()
-            .get(RecordType.User, request.params.user_id)
+            .get('user', request.params.user_id)
             .then((data) => {
                 response.send(data);
             })
@@ -28,7 +27,7 @@ const handlers: HandlerSet = {
     put(request, response) {
         const body = request.body;
         client()
-            .set(RecordType.User, body)
+            .set('user', body)
             .then((data) => {
                 response.send(data);
             })
@@ -39,7 +38,7 @@ const handlers: HandlerSet = {
 
     getMe(req, res) {
         client()
-            .get(RecordType.User, req.user.id)
+            .get('user', req.user.id)
             .then((data) => {
                 res.send(data);
             })

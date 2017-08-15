@@ -370,3 +370,4 @@ exports.default = (prefix = '', schema = 'public') => {
     };
     return { sql };
 };
+//# sourceMappingURL=queries.js.map

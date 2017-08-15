@@ -37,6 +37,7 @@ const getFromPersistent: (a: RecordType, b: string) => Promise<ModelData> =
         const queryName = `${objType}Get`;
         const typeHandler = record(objType);
         const params = [id];
+        logger(`getFromPersistent`, queryName, params);
 
         const resolver: (a: ModelDataResolveFn, b: RejectFn) => void =
             (resolve, reject) => {
@@ -85,7 +86,7 @@ const queryPersistent: (a: string, b: RecordType, c: any[]) => Promise<ModelData
 const saveToPersistent: (a: RecordType, b: (ModelData | BaseModelData)) => Promise<QueryResult> =
     (objType, obj) => {
         const op = ('id' in obj) ? 'Update' : 'Create';
-        const recName = RecordType[objType];
+        const recName = objType;
         const queryName = recName + op;
         const rec = record(objType);
         const prepObj = rec.prepare(obj);
@@ -147,6 +148,7 @@ const updateRecord: (a: CacheItem) => Promise<void> =
             return kvClient().put(item.id, objString)
                 .then(() => {
                     markClean(item);
+                    logger(`updateRecord SUCCESS ${item.id}`);
                 })
                 .catch(logError('CacheItem.updateRecord'));
         }
@@ -159,10 +161,10 @@ const getFeatures = (groupData: IMap) => (lyr: ModelData) => {
     const queries: Promise<QueryResult>[] = [];
     const records: Record[] = [];
     const features: ModelData[] = [];
-    const types = [RecordType.Entity, RecordType.Path, RecordType.Spread];
+    const types: RecordType[] = ['entity', 'path', 'spread'];
 
     types.forEach((t) => {
-        const tName = RecordType[t];
+        const tName = t;
         queries.push(
             persistentClient().query(`${tName}GetLayer`, [layerId]));
         records.push(record(t));
@@ -190,7 +192,7 @@ const getCompositions = (item: CacheItem) => (result: QueryResult) => {
         return (
             Promise
                 .map(result.rows, composition =>
-                    getFromPersistent(RecordType.Layer, composition.layer_id))
+                    getFromPersistent('layer', composition.layer_id))
                 .map(getFeatures(item.data))
                 .then(() => { updateRecord(item); }));
     }
@@ -220,7 +222,7 @@ const loadItem: (a: CacheItem) => Promise<void> =
         };
 
         return (
-            getFromPersistent(RecordType.Group, item.id)
+            getFromPersistent('group', item.id)
                 .then(getGroup)
                 .then(getCompositions(item))
                 .catch(logError('CacheItem.load')));
@@ -304,12 +306,12 @@ const CacheStore: () => ICacheStore =
 
         const dirtyDeps = (objType: RecordType, data: ModelData, groups: string[]) => {
             let layerId: string;
-            if (RecordType.Layer === objType) {
+            if ('layer' === objType) {
                 layerId = data.id;
             }
-            else if (RecordType.Entity === objType
-                || RecordType.Path === objType
-                || RecordType.Spread === objType) {
+            else if ('entity' === objType
+                || 'path' === objType
+                || 'spread' === objType) {
 
                 layerId = data.layer_id;
             }
@@ -323,7 +325,7 @@ const CacheStore: () => ICacheStore =
         };
 
         const actionCreate = (objType: RecordType, data: ModelData, groups: string[]) => {
-            if (RecordType.Composition === objType) {
+            if ('composition' === objType) {
                 const citem = storedGroups.get(data.group_id);
                 if (citem) {
                     const lid = data.layer_id;
@@ -338,7 +340,7 @@ const CacheStore: () => ICacheStore =
         };
 
         const actionUpdate = (objType: RecordType, data: ModelData, groups: string[]) => {
-            if (RecordType.Group === objType) {
+            if ('group' === objType) {
                 const citem = storedGroups.get(data.id);
                 if (citem) {
                     markDirty(citem);
@@ -352,7 +354,7 @@ const CacheStore: () => ICacheStore =
 
 
         const actionDelete = (objType: RecordType, data: ModelData, groups: string[]) => {
-            if (RecordType.Composition === objType) {
+            if ('composition' === objType) {
                 if (storedGroups.has(data.group_id)) {
                     const lid = data.layer_id;
                     const citem = storedGroups.get(data.group_id);
@@ -437,13 +439,13 @@ const Cache: () => ICache =
             const geomType = (obj.geom) ? obj.geom.type : 'GeometryNone';
 
             if ('Point' === geomType) {
-                return set(RecordType.Entity, obj);
+                return set('entity', obj);
             }
             else if ('LineString' === geomType) {
-                return set(RecordType.Path, obj);
+                return set('path', obj);
             }
             else if ('Polygon' === geomType) {
-                return set(RecordType.Spread, obj);
+                return set('spread', obj);
             }
 
             return Promise.reject(`unsupported geometry type ${geomType}`);
@@ -453,15 +455,15 @@ const Cache: () => ICache =
         const delFeature = (lid: string, fid: string, geomType: string) => {
             const resolver = (resolve: () => void, reject: RejectFn) => {
                 let queryName: string;
-                let featureType: RecordType = RecordType.Entity;
+                let featureType: RecordType = 'entity';
 
                 if ('linestring' === geomType) {
-                    featureType = RecordType.Path;
+                    featureType = 'path';
                 }
                 else if ('polygon' === geomType) {
-                    featureType = RecordType.Spread;
+                    featureType = 'spread';
                 }
-                queryName = RecordType[featureType] + 'Delete';
+                queryName = featureType + 'Delete';
 
                 persistentClient().query(queryName, [fid])
                     .then(() => {
@@ -486,7 +488,7 @@ const Cache: () => ICache =
                     .query('compositionDelete', [groupId, layerId])
                     .then(() => {
                         resolve();
-                        cacheStore.update(RecordType.Composition, CacheStoreAction.Delete, {
+                        cacheStore.update('composition', CacheStoreAction.Delete, {
                             layer_id: layerId,
                             group_id: groupId,
                             id: 'xxxx',
@@ -519,7 +521,7 @@ const Cache: () => ICache =
                 const objs: Promise<ModelData>[] = docs.reduce((acc, doc) => {
                     const groups: string[] = doc.groups || [];
                     groups.forEach((gid) => {
-                        acc.push(get(RecordType.Group, gid));
+                        acc.push(get('group', gid));
                     });
                     return acc;
                 }, []);

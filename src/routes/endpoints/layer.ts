@@ -10,7 +10,6 @@
 
 import { HandlerSet, EndpointSet, ApiHandler } from './index';
 import { client } from '../../lib/cache';
-import { RecordType } from '../../lib/models';
 import { notifyUpdate, notifyCreate } from '../../lib/notifier';
 
 const handlers: HandlerSet = {
@@ -28,7 +27,7 @@ const handlers: HandlerSet = {
 
     get(request, response) {
         client()
-            .get(RecordType.Layer, request.params.layer_id)
+            .get('layer', request.params.layer_id)
             .then((data) => {
                 response.send(data);
             })
@@ -45,7 +44,7 @@ const handlers: HandlerSet = {
         });
 
         client()
-            .set(RecordType.Layer, body)
+            .set('layer', body)
             .then((layer) => {
                 const compositionData = {
                     layer_id: layer.id,
@@ -53,7 +52,7 @@ const handlers: HandlerSet = {
                     properties: {},
                 };
                 client()
-                    .set(RecordType.Composition, compositionData)
+                    .set('composition', compositionData)
                     .then((/* composition */) => {
                         response.status(201).send(layer);
                         notifyCreate('layer', groupId, layer);
@@ -72,7 +71,7 @@ const handlers: HandlerSet = {
             id: layerId,
         });
         client()
-            .set(RecordType.Layer, body)
+            .set('layer', body)
             .then((data) => {
                 response.send(data);
                 notifyUpdate('layer', layerId, data);

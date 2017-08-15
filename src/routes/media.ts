@@ -18,7 +18,6 @@ import * as multer from 'multer';
 import * as magick from 'imagemagick-native';
 import * as mkdirp from 'mkdirp';
 import cache from '../lib/cache';
-import { RecordType } from '../lib/models';
 import { paginate } from './endpoints/index';
 
 
@@ -118,7 +117,7 @@ const listMedia =
     (request: e.Request, response: e.Response) => {
         const userId = request.params.user_id;
         cache()
-            .query('mediaList', RecordType.Media, [userId])
+            .query('mediaList', 'media', [userId])
             .then((results) => {
                 paginate(results, request, response);
             })
@@ -153,7 +152,7 @@ const getMedia =
             const path = join(rootDir, userId, mediaId, fn);
 
             cache()
-                .get(RecordType.Media, mediaId)
+                .get('media', mediaId)
                 .then((rec) => {
                     if (rec.user_id === userId) {
                         exists(path, (itExists) => {
@@ -181,7 +180,7 @@ const recordMedia =
     (userId: string, f: Express.Multer.File) => {
         return (
             cache()
-                .set(RecordType.Media, {
+                .set('media', {
                     user_id: userId,
                     properties: {
                         mimetype: f.mimetype,

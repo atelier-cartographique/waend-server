@@ -36,3 +36,4 @@ exports.client = () => {
     return { query };
 };
 logger('module loaded');
+//# sourceMappingURL=db.js.map

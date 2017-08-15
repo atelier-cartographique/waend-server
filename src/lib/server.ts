@@ -24,7 +24,7 @@ import * as http from 'http';
 import * as debug from 'debug';
 import { Strategy } from 'passport-local';
 import { verify } from './auth';
-import { RecordType, ModelData } from './models';
+import { ModelData } from './models';
 import { client as cacheClient } from './cache';
 
 const logger = debug('waend:server');
@@ -36,14 +36,15 @@ passport.serializeUser<ModelData, string>((user, done) => {
 
 passport.deserializeUser<ModelData, string>((id, done) => {
     cacheClient()
-        .get(RecordType.User, id)
+        .get('user', id)
         .then((user) => {
             done(null, user);
         })
-        .catch(() => {
+        .catch((err) => {
             done({
                 error: 'cannot find user',
             });
+            logger(`deserializeUser error: ${err}`);
         });
 });
 

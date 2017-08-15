@@ -108,39 +108,40 @@ export class Tag extends Record {
 
 
 
-export enum RecordType {
-    Group,
-    Composition,
-    User,
-    Layer,
-    Spread,
-    Path,
-    Entity,
-    Media,
-    Tag,
-}
+export type RecordType =
+    | 'group'
+    | 'composition'
+    | 'user'
+    | 'layer'
+    | 'spread'
+    | 'path'
+    | 'entity'
+    | 'media'
+    | 'tag'
+    ;
+
 
 
 export const record: (a: RecordType) => Record =
     (recType) => {
         switch (recType) {
-            case RecordType.Group:
+            case 'group':
                 return (new Group());
-            case RecordType.Composition:
+            case 'composition':
                 return (new Composition());
-            case RecordType.User:
+            case 'user':
                 return (new User());
-            case RecordType.Layer:
+            case 'layer':
                 return (new Layer());
-            case RecordType.Spread:
+            case 'spread':
                 return (new Spread());
-            case RecordType.Path:
+            case 'path':
                 return (new Path());
-            case RecordType.Entity:
+            case 'entity':
                 return (new Entity());
-            case RecordType.Media:
+            case 'media':
                 return (new Media());
-            case RecordType.Tag:
+            case 'tag':
                 return (new Tag());
         }
     };

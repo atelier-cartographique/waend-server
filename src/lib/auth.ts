@@ -14,7 +14,7 @@ import * as uuid from 'uuid';
 import { client as cache } from './cache';
 import { client as db } from './db';
 import { QueryResult } from "pg";
-import { RecordType, ModelData } from "./models";
+import { ModelData } from "./models";
 
 
 const logger = debug('lib/auth');
@@ -28,6 +28,7 @@ const getAuthenicatedUser = (authId: string) => {
 const comparePassword: (a: string) => (b: QueryResult) => Promise<string> =
     (password) => (qr) => {
         // fields = ['id', 'email', 'hash'];
+        logger(`comparePassword ${qr.rows[0]}`)
         if (qr.rowCount < 1) {
             return Promise.reject(new Error('not a registered user'));
         }
@@ -35,21 +36,19 @@ const comparePassword: (a: string) => (b: QueryResult) => Promise<string> =
         const hash: string = qr.rows[0].password;
         const id: string = qr.rows[0].id;
 
-        const resolve = (result: boolean) => {
-            if (!result) {
-                // return Promise.reject(new Error('wrong password'));
-                throw (new Error('wrong password'));
+        const resolver =
+            (resolve: (a: string) => void, reject: (e: Error) => void) => {
+                bcrypt.compare(password, hash, (err, same) => {
+                    if (err || !same) {
+                        return reject(new Error('wrong password'));
+                    }
+                    resolve(id);
+                })
             }
-            return id;
-        };
 
-        return (
-            bcrypt
-                .compare(password, hash)
-                .then(resolve)
-        );
+        return (new Promise(resolver));
 
-    }
+    };
 
 
 export type DoneFn = (a: Error | null, b: ModelData | null) => void;
@@ -67,8 +66,7 @@ export const verify = (email: string, password: string, done: DoneFn) => {
     };
 
     return (
-        db()
-            .query('authGetEmail', [email])
+        db().query('authGetEmail', [email])
             .then(comparePassword(password))
             .then(getAuthenicatedUser)
             .then(result => result.rows[0])
@@ -82,7 +80,7 @@ const createUser = (name: string) => (qr: QueryResult) => {
         auth_id: qr.rows[0].id,
         properties: { name },
     };
-    return cache().set(RecordType.User, user);
+    return cache().set('user', user);
 };
 
 

@@ -36,8 +36,8 @@ const Indexer: (a: solr.Client) => IIndexer =
         const updateBatch: IndexerUpdateBatch =
             (type, groups, models) => {
                 const docs = models.map((model) => ({
+                    type,
                     id: model.id,
-                    type: RecordType[type],
                     groups: groups || [],
                     properties: model.properties
                 }));
@@ -46,7 +46,7 @@ const Indexer: (a: solr.Client) => IIndexer =
 
                     const resolver: (a: () => void, b: (c: Error) => void) => void =
                         (resolve, reject) => {
-                            client.add(docs, function(err) {
+                            client.add(docs, function (err) {
                                 if (err) {
                                     logger(err);
                                     return reject(err);
@@ -75,7 +75,7 @@ const Indexer: (a: solr.Client) => IIndexer =
 
                 const resolver: (a: (d: any) => void, b: (c: Error) => void) => void =
                     (resolve, reject) => {
-                        client.search(query, function(err, obj) {
+                        client.search(query, function (err, obj) {
                             if (err) {
                                 reject(err);
                             }

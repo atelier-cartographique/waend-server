@@ -32,3 +32,4 @@ const startServer = (confPath) => {
     log('app started');
 };
 startServer(nconf.get('c'));
+//# sourceMappingURL=index.js.map

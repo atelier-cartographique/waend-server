@@ -11,7 +11,6 @@
 import * as debug from 'debug';
 import { HandlerSet, EndpointSet, ApiHandler, paginate } from './index';
 import { client } from '../../lib/cache';
-import { RecordType } from '../../lib/models';
 import { notifyUpdate, notifyCreate } from '../../lib/notifier';
 
 const logger = debug('waend:routes/endpoints/user');
@@ -43,7 +42,7 @@ const handlers: HandlerSet = {
                 response.send(data);
             })
             .catch((err) => {
-                console.error('group.get', err);
+                logger('get', err);
                 response.status(404).send(err);
             });
     },
@@ -55,7 +54,7 @@ const handlers: HandlerSet = {
             listPrivate = true;
         }
         client()
-            .query('groupListForUser', RecordType.Group, [request.params.user_id])
+            .query('groupListForUser', 'group', [request.params.user_id])
             .then((results) => {
                 if (listPrivate) {
                     paginate(results, request, response);
@@ -66,7 +65,7 @@ const handlers: HandlerSet = {
                 }
             })
             .catch((err) => {
-                console.error('groups.list error', err);
+                logger('list error', err);
                 response.status(500).send(err);
             });
     },
@@ -77,7 +76,7 @@ const handlers: HandlerSet = {
             request.body, { user_id: uid });
 
         client()
-            .set(RecordType.Group, body)
+            .set('group', body)
             .then((data) => {
                 response.status(201).send(data);
                 notifyCreate('group', uid, data);
@@ -93,7 +92,7 @@ const handlers: HandlerSet = {
             id: request.params.group_id,
         });
         client()
-            .set(RecordType.Group, body)
+            .set('group', body)
             .then((data) => {
                 response.send(data);
                 notifyUpdate('group', data.id, data);
@@ -109,14 +108,14 @@ const handlers: HandlerSet = {
         const userId = request.user.id;
 
         client()
-            .get(RecordType.Layer, layerId)
+            .get('layer', layerId)
             .then((layer) => {
                 if (layer.user_id !== userId) {
                     response.status(403).send('Not Your Layer');
                     return;
                 }
                 client()
-                    .set(RecordType.Composition, body)
+                    .set('composition', body)
                     .then(() => {
                         response.status(201).end();
                     });
@@ -133,7 +132,7 @@ const handlers: HandlerSet = {
         const userId = request.user.id;
 
         client()
-            .get(RecordType.Layer, layerId)
+            .get('layer', layerId)
             .then((layer) => {
                 if (layer.user_id !== userId) {
                     response.status(403).send('Not Your Layer');

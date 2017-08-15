@@ -1,5 +1,5 @@
 
-import { readFileSync } from 'fs';
+import { readFileSync, watch } from 'fs';
 import * as debug from 'debug';
 import * as e from 'express';
 import { JSDOM } from 'jsdom';
@@ -14,7 +14,7 @@ import { JSDOM } from 'jsdom';
 const logger = debug('waend:routes/applications');
 
 const renderIndex =
-    (app: any /* WaendApplication */) => {
+    (app: any) => {
         const dom = new JSDOM('<!DOCTYPE html>');
         const doc = dom.window.document;
         const head = doc.head;
@@ -49,6 +49,21 @@ const renderIndex =
         return dom.serialize();
     };
 
+const scriptContent =
+    (fp: string) => {
+        const initialScript = readFileSync(fp);
+        const versions = [initialScript];
+
+        watch(fp, (event) => {
+            if (event === 'change') {
+                versions.push(readFileSync(fp));
+                logger(`loaded script [${fp}][${versions.length}]`);
+            }
+        });
+
+        return (() => versions[versions.length - 1]);
+    };
+
 
 const configure =
     (apps: any[] /* WaendApplication[] */, router: e.Router) => {
@@ -60,12 +75,12 @@ const configure =
             logger('loading', name, version);
             const fullName = `${name}-${version}`;
             const index = renderIndex(app);
-            const script = readFileSync(app.application);
+            const script = scriptContent(app.application);
 
             router.get(`/${name}*`,
                 (_request, response) => response.send(index));
             router.get(`/bin/${fullName}.js`,
-                (_request, response) => response.send(script));
+                (_request, response) => response.send(script()));
 
             if (app.styleDir) {
                 const styleService = e.static(app.styleDir);

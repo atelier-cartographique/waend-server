@@ -14,7 +14,7 @@
         "noUnusedParameters": true,
         "strictNullChecks": true,
         "removeComments": true,
-        "sourceMap": false
+        "sourceMap": true
     },
     "files": [
         "src/index.ts"

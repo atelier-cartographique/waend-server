@@ -11,7 +11,6 @@
 
 import * as e from 'express';
 import cache from '../../lib/cache';
-import { RecordType } from '../../lib/models';
 
 export type PermissionName =
     | 'anyPermission'
@@ -53,7 +52,7 @@ export const permissions: PermissionTable = {
         const requestUserId = request.user.id;
 
         cache()
-            .get(RecordType.Group, groupId)
+            .get('group', groupId)
             .then((group) => {
                 if (requestUserId === group.user_id) {
                     return next();
@@ -70,7 +69,7 @@ export const permissions: PermissionTable = {
         const requestUserId = request.user.id;
 
         cache()
-            .get(RecordType.Layer, layerId)
+            .get('layer', layerId)
             .then((layer) => {
                 if (requestUserId === layer.user_id) {
                     return next();
@@ -86,7 +85,7 @@ export const permissions: PermissionTable = {
         const groupId = request.params.group_id;
         const requestUserId = (request.user) ? request.user.id : 'x';
         cache()
-            .get(RecordType.Group, groupId)
+            .get('group', groupId)
             .then((group) => {
                 if ((0 === group.status_flag)
                     || (requestUserId === group.user_id)) {
