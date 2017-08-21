@@ -55,7 +55,7 @@ const register =
             const email = req.body.email;
             const password = req.body.password;
             const name = req.body.username;
-
+            console.log('register', email, password);
             authRegister(email, password, name)
                 .then((user) => {
                     req.login(user, (err) => {

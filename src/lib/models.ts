@@ -7,8 +7,7 @@
  */
 
 import * as uuid from 'uuid';
-// import { Maybe } from 'monet';
-// import wellknown from 'wellknown';
+
 
 
 export interface ModelProperties {
@@ -71,39 +70,39 @@ export class Record {
 
 
 export class Entity extends Record {
-    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom']
+    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
 }
 
 export class Path extends Record {
-    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom']
+    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
 }
 
 export class Spread extends Record {
-    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom']
+    parameters = ['id', 'layer_id', 'user_id', 'properties', 'geom'];
 }
 
 export class Layer extends Record {
-    parameters = ['id', 'user_id', 'properties']
+    parameters = ['id', 'user_id', 'properties'];
 }
 
 export class User extends Record {
-    parameters = ['id', 'auth_id', 'properties']
+    parameters = ['id', 'auth_id', 'properties'];
 }
 
 export class Composition extends Record {
-    parameters = ['id', 'layer_id', 'group_id']
+    parameters = ['id', 'layer_id', 'group_id'];
 }
 
 export class Group extends Record {
-    parameters = ['id', 'user_id', 'status_flag', 'properties']
+    parameters = ['id', 'user_id', 'status_flag', 'properties'];
 }
 
 export class Media extends Record {
-    parameters = ['id', 'user_id', 'properties']
+    parameters = ['id', 'user_id', 'properties'];
 }
 
 export class Tag extends Record {
-    parameters = ['id', 'user_id', 'name']
+    parameters = ['id', 'user_id', 'name'];
 }
 
 

@@ -85,20 +85,42 @@ const createUser = (name: string) => (qr: QueryResult) => {
 
 
 const createAuth = (email: string) => (hash: string) => {
-    // logger('auth.createAuth', email, hash);
-    return db().query('authCreate', [uuid.v4(), email, hash]);
+    const id = uuid.v4();
+    logger('auth.createAuth', id, email, hash);
+    return db().query('authCreate', [id, email, hash]);
 };
 
-export const register = (email: string, password: string, name: string) => {
-    const seededCreateAuth = createAuth(email);
-    const seededCreateUser = createUser(name);
 
+const genSalt =
+    (rounds: number) => (
+        new Promise<string>((resolve, reject) => {
+            bcrypt.genSalt(rounds, (err, salt) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(salt);
+            })
+        })
+    );
+
+const hashPassword =
+    (password: string) => (salt: string) => (
+        new Promise<string>((resolve, reject) => {
+            bcrypt.hash(password, salt, (err, encrypted) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(encrypted);
+            })
+        })
+    )
+
+export const register = (email: string, password: string, name: string) => {
     return (
-        bcrypt
-            .genSalt(12)
-            .then((salt) => bcrypt.hash(password, salt))
-            .then<QueryResult>(seededCreateAuth)
-            .then(seededCreateUser));
+        genSalt(12)
+            .then(hashPassword(password))
+            .then<QueryResult>(createAuth(email))
+            .then(createUser(name)));
 };
 
 

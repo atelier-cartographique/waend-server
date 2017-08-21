@@ -29,6 +29,10 @@ import { client as cacheClient } from './cache';
 
 const logger = debug('waend:server');
 
+const anonymousUser: ModelData = {
+    id: 'anonymous',
+    properties: {},
+}
 
 passport.serializeUser<ModelData, string>((user, done) => {
     done(null, user.id);
@@ -41,9 +45,8 @@ passport.deserializeUser<ModelData, string>((id, done) => {
             done(null, user);
         })
         .catch((err) => {
-            done({
-                error: 'cannot find user',
-            });
+            // done(new Error('cannot find user'));
+            done(null, anonymousUser);
             logger(`deserializeUser error: ${err}`);
         });
 });

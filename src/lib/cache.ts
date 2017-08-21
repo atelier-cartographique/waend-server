@@ -72,7 +72,7 @@ const queryPersistent: (a: string, b: RecordType, c: any[]) => Promise<ModelData
                                 result.rows.map(row => typeHandler.buildFromPersistent(row)));
                         }
                         else {
-                            reject(new Error('EmptyResultSet'));
+                            reject(new Error(`EmptyResultSet [${queryName}][${objType}](${params})`));
                         }
                     })
                     .catch(reject);
