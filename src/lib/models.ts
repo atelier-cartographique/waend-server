@@ -41,7 +41,8 @@ export class Record {
     getParameters(obj: ModelData): any[] {
         const p = this.parameters;
         return p.map((key) => {
-            if ('geom' === key) {
+            // if ('geom' === key ) {
+            if (typeof obj[key] === 'object') {
                 return JSON.stringify(obj[key]);
             }
             return obj[key];
