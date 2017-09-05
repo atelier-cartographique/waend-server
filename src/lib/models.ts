@@ -34,7 +34,7 @@ export class Record {
         if ('id' in obj) {
             return <ModelData>{ ...obj };
         }
-        return { id: uuid.v4(), ...obj };
+        return { ...obj, id: uuid.v4() };
     }
 
 

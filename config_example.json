@@ -1,6 +1,6 @@
 {
     "pg": {
-        "host": "pierre-m.speculoos",
+        "host": "127.0.0.1",
         "user": "pierre",
         "password": "plokplok",
         "database": "waend"
@@ -32,6 +32,12 @@
                 "version": "0.1.0",
                 "application": "/home/pierre/System/src/waend-apps/dashboard/dist/bundle.js",
                 "styleDir": "/home/pierre/System/src/waend-apps/dashboard/dist/"
+            },
+            {
+                "name": "sign",
+                "version": "0.1.0",
+                "application": "/home/pierre/System/src/waend-apps/sign/dist/bundle.js",
+                "styleDir": "/home/pierre/System/src/waend-apps/sign/dist/"
             }
         ],
         "public": {

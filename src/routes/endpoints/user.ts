@@ -12,7 +12,7 @@ import * as debug from 'debug';
 import { HandlerSet, EndpointSet, ApiHandler } from './index';
 import { client } from '../../lib/cache';
 
-const logger = debug('waend:routes/user');
+const logger = debug('waend:routes/endpoints/user');
 
 const handlers: HandlerSet = {
     get(request, response) {
