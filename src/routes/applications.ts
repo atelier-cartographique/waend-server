@@ -14,40 +14,41 @@ import { JSDOM } from 'jsdom';
 const logger = debug('waend:routes/applications');
 
 const renderIndex =
-    (app: any) => {
-        const dom = new JSDOM('<!DOCTYPE html>');
-        const doc = dom.window.document;
-        const head = doc.head;
-        const title = doc.createElement('title');
-        const metaViewport = doc.createElement('meta');
-        const style = doc.createElement('link');
-        const localScript = doc.createElement('script');
-        const script = doc.createElement('script');
-        const { name, version } = app;
-        const fullName = `${name}-${version}`;
+    (app: any) =>
+        (bundle: string) => {
+            const dom = new JSDOM('<!DOCTYPE html>');
+            const doc = dom.window.document;
+            const head = doc.head;
+            const title = doc.createElement('title');
+            const metaViewport = doc.createElement('meta');
+            const style = doc.createElement('link');
+            const localScript = doc.createElement('script');
+            const script = doc.createElement('script');
+            const { name, version } = app;
+            const fullName = `${name}-${version}`;
 
-        title.appendChild(doc.createTextNode(`wænd ${name}`));
-        head.appendChild(title);
+            title.appendChild(doc.createTextNode(`wænd ${name}`));
+            head.appendChild(title);
 
-        metaViewport.setAttribute('name', 'viewport');
-        metaViewport.setAttribute('content', 'width=device-width, height=device-height, initial-scale=1, maximum-scale=1');
-        head.appendChild(metaViewport);
+            metaViewport.setAttribute('name', 'viewport');
+            metaViewport.setAttribute('content', 'width=device-width, height=device-height, initial-scale=1, maximum-scale=1');
+            head.appendChild(metaViewport);
 
-        style.setAttribute('rel', 'stylesheet');
-        style.setAttribute('type', 'text/css');
-        style.setAttribute('href', `/style/${fullName}/style.css`);
-        head.appendChild(style);
+            style.setAttribute('rel', 'stylesheet');
+            style.setAttribute('type', 'text/css');
+            style.setAttribute('href', `/style/${fullName}/style.css`);
+            head.appendChild(style);
 
-        localScript.appendChild(doc.createTextNode(`
+            localScript.appendChild(doc.createTextNode(`
         window.FRAGMENT_ROOT = '/${name}/';
         `));
-        head.appendChild(localScript);
+            head.appendChild(localScript);
 
-        script.setAttribute('src', `/bin/${fullName}.js`);
-        head.appendChild(script);
+            script.appendChild(doc.createTextNode(bundle));
+            doc.body.appendChild(script);
 
-        return dom.serialize();
-    };
+            return dom.serialize();
+        };
 
 const scriptContent =
     (fp: string) => {
@@ -61,7 +62,27 @@ const scriptContent =
             }
         });
 
-        return (() => versions[versions.length - 1]);
+        return ((request: e.Request) => {
+            const publicConfig = request.app.locals.public;
+            const bundle = versions[versions.length - 1];
+            const params = request.params[0].split('/');
+            return (
+                `
+                (function () {
+                    ${ bundle}
+                    document.onreadystatechange = function startApplication() {
+                        if ('interactive' === document.readyState) {
+                            bundle({
+                                args: "${params}",
+                                config: ${JSON.stringify(publicConfig)}, 
+                            });
+                        }
+                    };
+                    
+                })();  
+                `
+            );
+        });
     };
 
 
@@ -77,10 +98,8 @@ const configure =
             const index = renderIndex(app);
             const script = scriptContent(app.application);
 
-            router.get(`/${name}*`,
-                (_request, response) => response.send(index));
-            router.get(`/bin/${fullName}.js`,
-                (_request, response) => response.send(script()));
+            router.get(`/${name}/*`,
+                (request, response) => response.send(index(script(request))));
 
             if (app.styleDir) {
                 const styleService = e.static(app.styleDir);
