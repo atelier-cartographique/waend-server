@@ -34,14 +34,15 @@ export class Record {
         if ('id' in obj) {
             return <ModelData>{ ...obj };
         }
-        return { id: uuid.v4(), ...obj };
+        return { ...obj, id: uuid.v4() };
     }
 
 
     getParameters(obj: ModelData): any[] {
         const p = this.parameters;
         return p.map((key) => {
-            if ('geom' === key) {
+            // if ('geom' === key ) {
+            if (typeof obj[key] === 'object') {
                 return JSON.stringify(obj[key]);
             }
             return obj[key];

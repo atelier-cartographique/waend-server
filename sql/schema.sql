@@ -171,13 +171,7 @@ DECLARE
   table_name TEXT := TG_ARGV[0];
 BEGIN
   EXECUTE 'INSERT INTO "updates" (object_id, table_name) VALUES ($1, $2);' USING NEW.id, table_name;
-
-  IF row(NEW.*) IS DISTINCT FROM row(OLD.*) THEN
-    NEW.last_modified = now();
-    RETURN NEW;
-  ELSE
-    RETURN OLD;
-  END IF;
+  RETURN NEW;
 END;
 $$ language 'plpgsql';
 

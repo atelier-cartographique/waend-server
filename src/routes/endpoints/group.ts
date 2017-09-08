@@ -13,7 +13,7 @@ import { HandlerSet, EndpointSet, ApiHandler, paginate } from './index';
 import { client } from '../../lib/cache';
 import { notifyUpdate, notifyCreate } from '../../lib/notifier';
 
-const logger = debug('waend:routes/endpoints/user');
+const logger = debug('waend:routes/endpoints/group');
 
 // const logger = require('debug')('routes/endpoints/user'),
 //     _ = require('underscore'),

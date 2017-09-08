@@ -417,6 +417,7 @@ const Cache: () => ICache =
 
 
         const set = (objType: RecordType, obj: BaseModelData | ModelData) => {
+            logger(`SET ${objType} ${obj}`);
             const action = ('id' in obj) ? CacheStoreAction.Update : CacheStoreAction.Create;
 
             const resolver = (resolve: (a: ModelData) => void) => {

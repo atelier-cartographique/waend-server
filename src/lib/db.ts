@@ -40,6 +40,7 @@ const query: (a: string, b: any[]) => Promise<pg.QueryResult> =
             (resolve, reject) => {
                 // might look a bit weird to wrap in another Promise
                 // but we really want bluebird niceties
+                logger(`QUERY \`${sql}\` [${params}]`);
                 pool.query(sql, params).then(resolve, reject);
             };
         return (new Promise(resolver));
@@ -56,6 +57,10 @@ export const configure: (a: any) => void =
         pool.on('error', function (err) {
             logError(`idle client error ${err.message}`);
             logError(err.stack);
+        });
+
+        pool.on('connect', () => {
+            logger('PG:Pool connected');
         });
 
         queries = Q(config.prefix, config.schema);

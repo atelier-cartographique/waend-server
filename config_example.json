@@ -1,50 +1,55 @@
 {
     "pg": {
-        "host"     : "127.0.0.1",
-        "user"     : "pierre",
-        "password" : "plokplok",
-        "database" : "waend"
-
+        "host": "127.0.0.1",
+        "user": "pierre",
+        "password": "plokplok",
+        "database": "waend"
     },
     "cache": {
         "level": {
-            "path" : "/tmp/waend_cache"
-        },
-        "redis": {
-            "host": "waend.local",
-            "port": 6379
+            "path": "/tmp/waend_cache"
         }
     },
     "notify": {
-        "url": "http://waend.local/notify"
+        "url": "http://localhost:8000/notify"
     },
-    "solr": {
-        "host": "localhost",
-        "port": 8983,
-        "collection": "waend"
-    },
-    "server":{
+    "server": {
         "port": 8000,
-        "viewEngine" : "ejs",
-        "mediaDir" : "/home/pierre/System/var/waend/media",
-        "views" : "/home/pierre/System/src/waend/views",
+        "viewEngine": "ejs",
+        "mediaDir": "/home/pierre/System/var/waend/medias",
+        "views": "/home/pierre/System/src/waend/views",
         "bodyParserLimit": "12000kb",
         "session": {
             "redis": {
-                "host": "waend.local",
+                "host": "pierre-m.speculoos",
                 "port": 6379
             },
             "secret": "abcdefghijklmnopqrstuvwxyz"
+        },
+        "applications": [
+            {
+                "name": "dashboard",
+                "version": "0.1.0",
+                "application": "/home/pierre/System/src/waend-apps/dashboard/dist/bundle.js",
+                "styleDir": "/home/pierre/System/src/waend-apps/dashboard/dist/"
+            },
+            {
+                "name": "sign",
+                "version": "0.1.0",
+                "application": "/home/pierre/System/src/waend-apps/sign/dist/bundle.js",
+                "styleDir": "/home/pierre/System/src/waend-apps/sign/dist/"
+            }
+        ],
+        "public": {
+            "baseUrl": "http://localhost:8000",
+            "loginUrl": "http://localhost:8000/login",
+            "registerUrl": "http://localhost:8000/register",
+            "logoutUrl": "http://localhost:8000/logout",
+            "apiUrl": "http://localhost:8000/api/v1",
+            "mediaUrl": "http://localhost:8000/media",
+            "binUrl": "http://localhost:8000/bin",
+            "notifyUrl": "http://localhost:8000/notify",
+            "defaultProgramUrl": "http://localhost:8000/bin/render0.js"
         }
-    },
-    "public":{
-        "baseUrl": "http://waend.local",
-        "loginUrl" : "http://waend.local/login",
-        "logoutUrl" : "http://waend.local/logout",
-        "apiUrl" : "http://waend.local/api/v1",
-        "mediaUrl" : "http://waend.local/media",
-        "binUrl" : "http://waend.local/bin",
-        "notifyUrl": "http://waend.local/notify",
-        "defaultProgramUrl": "http://waend.local/bin/render0.js"
     }
 }

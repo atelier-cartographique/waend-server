@@ -8,9 +8,11 @@
  *
  */
 
+import * as debug from 'debug';
 import { HandlerSet, EndpointSet, ApiHandler } from './index';
 import { client } from '../../lib/cache';
 
+const logger = debug('waend:routes/endpoints/user');
 
 const handlers: HandlerSet = {
     get(request, response) {
@@ -26,6 +28,7 @@ const handlers: HandlerSet = {
 
     put(request, response) {
         const body = request.body;
+        logger(body);
         client()
             .set('user', body)
             .then((data) => {
@@ -70,3 +73,5 @@ const endpoints: EndpointSet<typeof handlers> = [
 ];
 
 export default { handlers, endpoints } as ApiHandler<typeof handlers>;
+
+logger('loaded');

@@ -13,8 +13,8 @@ import * as bcrypt from 'bcrypt';
 import * as uuid from 'uuid';
 import { client as cache } from './cache';
 import { client as db } from './db';
-import { QueryResult } from "pg";
-import { ModelData } from "./models";
+import { QueryResult } from 'pg';
+import { ModelData } from './models';
 
 
 const logger = debug('lib/auth');
@@ -22,13 +22,13 @@ const logger = debug('lib/auth');
 
 const getAuthenicatedUser = (authId: string) => {
     return db().query('userGetAuth', [authId]);
-}
+};
 
 
 const comparePassword: (a: string) => (b: QueryResult) => Promise<string> =
     (password) => (qr) => {
         // fields = ['id', 'email', 'hash'];
-        logger(`comparePassword ${qr.rows[0]}`)
+        logger(`comparePassword ${qr.rows[0]}`);
         if (qr.rowCount < 1) {
             return Promise.reject(new Error('not a registered user'));
         }
@@ -44,7 +44,7 @@ const comparePassword: (a: string) => (b: QueryResult) => Promise<string> =
                     }
                     resolve(id);
                 })
-            }
+            };
 
         return (new Promise(resolver));
 
@@ -99,7 +99,7 @@ const genSalt =
                     return reject(err);
                 }
                 resolve(salt);
-            })
+            });
         })
     );
 
@@ -113,7 +113,7 @@ const hashPassword =
                 resolve(encrypted);
             })
         })
-    )
+    );
 
 export const register = (email: string, password: string, name: string) => {
     return (
