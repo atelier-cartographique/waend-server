@@ -73,7 +73,7 @@ const scriptContent =
                     document.onreadystatechange = function startApplication() {
                         if ('interactive' === document.readyState) {
                             bundle({
-                                args: "${params}",
+                                args: ${JSON.stringify(params)},
                                 config: ${JSON.stringify(publicConfig)}, 
                             });
                         }

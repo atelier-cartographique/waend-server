@@ -14,6 +14,7 @@ const query = (queryName, params) => {
         return Promise.reject(new Error('Query does not exists or invalid parameters'));
     }
     const resolver = (resolve, reject) => {
+        logger(`QUERY \`${sql}\` [${params}]`);
         pool.query(sql, params).then(resolve, reject);
     };
     return (new Promise(resolver));
@@ -26,6 +27,9 @@ exports.configure = (config) => {
     pool.on('error', function (err) {
         logError(`idle client error ${err.message}`);
         logError(err.stack);
+    });
+    pool.on('connect', () => {
+        logger('PG:Pool connected');
     });
     queries = queries_1.default(config.prefix, config.schema);
 };

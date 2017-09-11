@@ -23,6 +23,7 @@ CREATE TABLE entities
   id uuid NOT NULL PRIMARY KEY,
   creation_date timestamp with time zone DEFAULT current_timestamp,
   last_modified timestamp with time zone DEFAULT current_timestamp ,
+  layer_id uuid NOT NULL,
   user_id uuid NOT NULL,
   properties json NOT NULL,
   geom geometry(Point, 4326) NOT NULL
