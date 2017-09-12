@@ -124,7 +124,7 @@ const configure =
                     const elem = doc.createElement('div');
                     const a = doc.createElement('a');
 
-                    a.setAttribute('href', r);
+                    a.setAttribute('href', `${r}/`);
                     a.appendChild(doc.createTextNode(r));
                     elem.appendChild(a);
                     doc.body.appendChild(elem);

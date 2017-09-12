@@ -14,6 +14,7 @@ import login from './login';
 import api from './api';
 import media from './media';
 import applications from './applications';
+import renderers from './renderers';
 
 
 const configure =
@@ -25,7 +26,7 @@ const configure =
         api(router);
         media(router, app);
         applications(app.locals.applications, router);
-
+        renderers(app.locals.renderers, router);
         app.use(router);
     };
 
