@@ -15,6 +15,7 @@ import api from './api';
 import media from './media';
 import applications from './applications';
 import renderers from './renderers';
+import fonts from './fonts';
 
 
 const configure =
@@ -27,6 +28,8 @@ const configure =
         media(router, app);
         applications(app.locals.applications, router);
         renderers(app.locals.renderers, router);
+        fonts(app.locals.fontDir, router);
+
         app.use(router);
     };
 
