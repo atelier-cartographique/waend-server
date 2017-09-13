@@ -143,7 +143,7 @@ const updateRecord: (a: CacheItem) => Promise<void> =
     (item) => {
         if (item.data) {
             const objString = JSON.stringify(item.data);
-            item.deps = item.data.group.layers.map((layer) => layer.id);
+            item.deps = item.data.group.layers.map(layer => layer.id);
 
             return kvClient().put(item.id, objString)
                 .then(() => {

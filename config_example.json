@@ -38,8 +38,18 @@
                 "version": "0.1.0",
                 "application": "/home/pierre/System/src/waend-apps/sign/dist/bundle.js",
                 "styleDir": "/home/pierre/System/src/waend-apps/sign/dist/"
+            },
+            {
+                "name": "edit",
+                "version": "0.1.0",
+                "application": "/home/pierre/System/src/waend-apps/edit/dist/bundle.js",
+                "styleDir": "/home/pierre/System/src/waend-apps/edit/dist/"
             }
         ],
+        "renderers": [
+            "/home/pierre/System/src/waend-apps/render0/dist/render0.js"
+        ],
+        "fontDir":"/home/pierre/Fonts",
         "public": {
             "baseUrl": "http://localhost:8000",
             "loginUrl": "http://localhost:8000/login",
@@ -49,7 +59,7 @@
             "mediaUrl": "http://localhost:8000/media",
             "binUrl": "http://localhost:8000/bin",
             "notifyUrl": "http://localhost:8000/notify",
-            "defaultProgramUrl": "http://localhost:8000/bin/render0.js"
+            "defaultProgramUrl": "http://localhost:8000/render/0.js"
         }
     }
 }
