@@ -65,7 +65,7 @@ const scriptContent =
         return ((request: e.Request) => {
             const publicConfig = request.app.locals.public;
             const bundle = versions[versions.length - 1];
-            const params = request.params[0].split('/');
+            const params = request.params[0].split('/').filter((p: any) => p.length > 0);
             return (
                 `
                 (function () {
@@ -98,7 +98,7 @@ const configure =
             const index = renderIndex(app);
             const script = scriptContent(app.application);
 
-            router.get(`/${name}/*`,
+            router.get(`/${name}*`,
                 (request, response) => response.send(index(script(request))));
 
             if (app.styleDir) {
