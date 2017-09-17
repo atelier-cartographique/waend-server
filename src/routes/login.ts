@@ -62,7 +62,7 @@ const register =
                         if (err) {
                             console.error('auto login after register:', err);
                         }
-                        res.redirect('/map');
+                        res.status(201).json(user);
                     });
                 })
                 .catch((error: Error) => {
