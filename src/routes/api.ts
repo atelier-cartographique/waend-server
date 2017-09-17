@@ -20,6 +20,11 @@ import feature from './endpoints/feature';
 const logger = debug('waend:api');
 const rootV1 = '/api/v1/';
 
+const noCache =
+    (_req: e.Request, res: e.Response, next: e.NextFunction) => {
+        res.header('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+        next();
+    }
 
 const configure =
     (router: e.Router) => {
@@ -37,7 +42,7 @@ const configure =
                 const handlerMethod = handlers[handler];
                 const perms = permissions.map(perm => permissionHandlers[perm]);
 
-                route(`${rootV1}${endpoint.url}`, ...perms, handlerMethod);
+                route(`${rootV1}${endpoint.url}`, ...perms, noCache, handlerMethod);
             });
         });
     };
