@@ -169,6 +169,7 @@ const handlers: HandlerSet = {
 
 
 const endpoints: EndpointSet<typeof handlers> = [
+
     {
         verb: 'get',
         handler: 'searchGroups',

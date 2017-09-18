@@ -315,6 +315,7 @@ const CacheStore: () => ICacheStore =
 
                 layerId = data.layer_id;
             }
+            logger(`dirtyDeps ${storedGroups.size}`)
             storedGroups.forEach((item, gid) => {
                 if (item.deps.find((lid) => lid === layerId)) {
                     markDirty(item);
@@ -325,6 +326,7 @@ const CacheStore: () => ICacheStore =
         };
 
         const actionCreate = (objType: RecordType, data: ModelData, groups: string[]) => {
+            logger(`actionCreate ${objType}`)
             if ('composition' === objType) {
                 const citem = storedGroups.get(data.group_id);
                 if (citem) {
@@ -340,6 +342,7 @@ const CacheStore: () => ICacheStore =
         };
 
         const actionUpdate = (objType: RecordType, data: ModelData, groups: string[]) => {
+            logger(`actionUpdate ${objType}`)
             if ('group' === objType) {
                 const citem = storedGroups.get(data.id);
                 if (citem) {
@@ -384,7 +387,9 @@ const CacheStore: () => ICacheStore =
                     actionDelete(objType, data, groups);
                     break;
             }
+            logger('CacheStore.updateGroups', groups.length);
             if (groups.length > 0) {
+                logger('CacheStore.updateGroups Index Update');
                 indexerClient().update(objType, groups, data);
             }
         };

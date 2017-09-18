@@ -30,11 +30,13 @@ const Indexer: (a: solr.Client) => IIndexer =
     (client) => {
 
         const update: IndexerUpdate = (type, groups, model) => {
+            logger('update', type);
             return updateBatch(type, groups, [model]);
         };
 
         const updateBatch: IndexerUpdateBatch =
             (type, groups, models) => {
+                logger('updateBatch', type);
                 const docs = models.map((model) => ({
                     type,
                     id: model.id,
@@ -46,7 +48,7 @@ const Indexer: (a: solr.Client) => IIndexer =
 
                     const resolver: (a: () => void, b: (c: Error) => void) => void =
                         (resolve, reject) => {
-                            client.add(docs, function (err) {
+                            client.add(docs, (err) => {
                                 if (err) {
                                     logger(err);
                                     return reject(err);
@@ -97,10 +99,12 @@ const NullIndexer: () => IIndexer =
     () => {
         return {
             update() {
+                logger('Updating Null Indexer, kind of useless')
                 return Promise.resolve();
             },
 
             updateBatch() {
+                logger('Updating Null Indexer, kind of useless')
                 return Promise.resolve();
             },
 
@@ -118,8 +122,8 @@ export const configure = (config?: any) => {
     }
 
     if (config) {
-        var solrClient = solr.createClient(
-            config.host, config.port, config.collection
+        const solrClient = solr.createClient(
+            config.host, config.port, config.collection,
         );
         solrClient.autoCommit = true;
 

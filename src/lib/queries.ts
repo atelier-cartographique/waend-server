@@ -46,6 +46,13 @@ export default (prefix = '', schema = 'public'): IQueries => {
             WHERE layer_id = $1;`;
     }
 
+    function geometricSQLGetLayerIntersects(tname: string) {
+        return `
+            SELECT id, layer_id, user_id, properties, ST_AsGeoJSON(geom) as geom 
+            FROM ${tableName(tname)}
+            WHERE layer_id = $1 AND ST_Intersects(geom, ST_GeomFromGeoJSON($2));`;
+    }
+
     function geometricSQLLoad(tname: string) {
         return `
             SELECT id, layer_id, user_id, properties, ST_AsGeoJSON(geom) as geom 
@@ -143,6 +150,10 @@ export default (prefix = '', schema = 'public'): IQueries => {
             params: ['layer_id'],
             sql: geometricSQLGetLayer('paths'),
         },
+        pathGetLayerIntersects: {
+            params: ['layer_id', 'geojson'],
+            sql: geometricSQLGetLayerIntersects('paths'),
+        },
 
 
         // spreads
@@ -173,6 +184,10 @@ export default (prefix = '', schema = 'public'): IQueries => {
         spreadGetLayer: {
             params: ['layer_id'],
             sql: geometricSQLGetLayer('spreads'),
+        },
+        spreadGetLayerIntersects: {
+            params: ['layer_id', 'geojson'],
+            sql: geometricSQLGetLayerIntersects('spreads'),
         },
 
 
