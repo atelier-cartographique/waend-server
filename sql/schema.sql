@@ -159,7 +159,34 @@ CREATE TABLE medias
 );
 
 
+COMMIT;
 
+BEGIN;
+-- views
+DROP VIEW IF EXISTS features;
+CREATE VIEW features 
+AS 
+(
+    SELECT 
+        p.id, 
+        ST_Envelope(p.geom) AS bbox, 
+        'paths' AS table_name, 
+        c.group_id 
+    FROM paths AS p 
+        LEFT JOIN compositions AS c  
+        ON p.layer_id = c.layer_id
+    ) 
+UNION
+(
+    SELECT 
+        p.id, 
+        ST_Envelope(p.geom) AS bbox, 
+        'spreads' AS table_name, 
+        c.group_id 
+    FROM spreads AS p 
+        LEFT JOIN compositions AS c  
+        ON p.layer_id = c.layer_id
+    );
 COMMIT;
 
 

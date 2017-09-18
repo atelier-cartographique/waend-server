@@ -10,10 +10,7 @@
 
 import { HandlerSet, EndpointSet, ApiHandler } from './index';
 import { client } from '../../lib/cache';
-import { client as persistentClient } from '../../lib/db';
-import { record } from '../../lib/models';
 import { notifyUpdate, notifyCreate } from '../../lib/notifier';
-import { DirectGeometryObjectIO } from 'geojson-iots';
 
 const handlers: HandlerSet = {
     // list: function (request, response) {
@@ -39,26 +36,7 @@ const handlers: HandlerSet = {
             });
     },
 
-    getIntersects(request, response) {
-        // const groupId: string = request.params.group_id;
-        const layerId: string = request.params.group_id;
-        DirectGeometryObjectIO.validate({ ...request.body }, [])
-            .fold(
-            () => { response.status(400).send(`invalid geometry`); },
-            geometry => persistentClient()
-                .query('spreadGetLayerIntersects', [layerId, JSON.stringify(geometry)])
-                .then((result) => {
-                    const typeHandler = record('spread');
-                    if (result.rowCount > 0) {
-                        const data = result.rows.map(typeHandler.buildFromPersistent);
-                        response.send(data);
-                    }
-                })
-                .catch((err) => {
-                    response.status(404).send(err);
-                })
-            );
-    },
+
 
 
     post(request, response) {
@@ -122,12 +100,6 @@ const endpoints: EndpointSet<typeof handlers> = [
         permissions: ['ownsGroupOrPublic'],
     },
 
-    {
-        verb: 'post',
-        handler: 'getIntersects',
-        url: 'user/:user_id/group/:group_id/layer/:layer_id/intersect/',
-        permissions: ['ownsGroupOrPublic'],
-    },
 
     {
         verb: 'post',
@@ -141,7 +113,7 @@ const endpoints: EndpointSet<typeof handlers> = [
         handler: 'put',
         url: 'user/:user_id/group/:group_id/layer/:layer_id',
         permissions: ['isAuthenticated', 'isLayerOwner'],
-    }
+    },
 ];
 
 

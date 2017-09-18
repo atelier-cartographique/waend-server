@@ -358,6 +358,18 @@ export default (prefix = '', schema = 'public'): IQueries => {
                 FROM ${tableName('groups')}
                 WHERE user_id = $1;`,
         },
+        groupListForGeometry: {
+            params: ['geojson'],
+            sql: `
+            SELECT DISTINCT ON (g.id) 
+                g.id, g.user_id, g.status_flag, g.properties 
+            FROM groups AS g 
+            LEFT JOIN features AS f
+                ON f.group_id = g.id
+            WHERE 
+                ST_Intersects(f.bbox, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))
+            ORDER BY g.id;`,
+        },
 
 
         // auth

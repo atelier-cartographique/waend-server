@@ -12,6 +12,9 @@ import * as debug from 'debug';
 import { HandlerSet, EndpointSet, ApiHandler, paginate } from './index';
 import { client } from '../../lib/cache';
 import { notifyUpdate, notifyCreate } from '../../lib/notifier';
+import { client as persistentClient } from '../../lib/db';
+import { record } from '../../lib/models';
+import { DirectGeometryObjectIO } from 'geojson-iots';
 
 const logger = debug('waend:routes/endpoints/group');
 
@@ -68,6 +71,25 @@ const handlers: HandlerSet = {
                 logger('list error', err);
                 response.status(500).send(err);
             });
+    },
+
+    listIntersects(request, response) {
+        DirectGeometryObjectIO.validate({ ...request.body }, [])
+            .fold(
+            () => { response.status(400).send(`invalid geometry`); },
+            geometry => persistentClient()
+                .query('groupListForGeometry', [JSON.stringify(geometry)])
+                .then((result) => {
+                    const typeHandler = record('group');
+                    if (result.rowCount > 0) {
+                        const data = result.rows.map(typeHandler.buildFromPersistent);
+                        response.send(data);
+                    }
+                })
+                .catch((err) => {
+                    response.status(404).send(err);
+                }),
+        );
     },
 
     post(request, response) {
@@ -174,6 +196,13 @@ const endpoints: EndpointSet<typeof handlers> = [
         verb: 'get',
         handler: 'searchGroups',
         url: 'group/:term',
+        permissions: [],
+    },
+
+    {
+        verb: 'post',
+        handler: 'listIntersects',
+        url: 'group/intersects/',
         permissions: [],
     },
 
