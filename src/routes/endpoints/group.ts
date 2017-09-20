@@ -82,8 +82,11 @@ const handlers: HandlerSet = {
                 .then((result) => {
                     const typeHandler = record('group');
                     if (result.rowCount > 0) {
-                        const data = result.rows.map(typeHandler.buildFromPersistent);
-                        response.send(data);
+                        const data = result.rows.map(row => typeHandler.buildFromPersistent(row));
+                        response.json(data);
+                    }
+                    else {
+                        response.json([]);
                     }
                 })
                 .catch((err) => {
