@@ -139,7 +139,7 @@ const cacheItem: (a: string) => CacheItem =
 /**
  * updates a record on the KV store
  */
-const updateRecord: (a: CacheItem) => Promise<void> =
+const updateRecord: (a: CacheItem) => Promise<CacheItem> =
     (item) => {
         if (item.data) {
             const objString = JSON.stringify(item.data);
@@ -149,6 +149,7 @@ const updateRecord: (a: CacheItem) => Promise<void> =
                 .then(() => {
                     markClean(item);
                     logger(`updateRecord SUCCESS ${item.id}`);
+                    return item;
                 })
                 .catch(logError('CacheItem.updateRecord'));
         }
@@ -187,32 +188,35 @@ const getFeatures = (groupData: IMap) => (lyr: ModelData) => {
 
 
 
-const getCompositions = (item: CacheItem) => (result: QueryResult) => {
-    if (result.rowCount > 0 && item.data) {
-        return (
-            Promise
-                .map(result.rows, composition =>
-                    getFromPersistent('layer', composition.layer_id))
-                .map(getFeatures(item.data))
-                .then(() => { updateRecord(item); }));
-    }
-    return updateRecord(item);
-};
+const getCompositions =
+    (item: CacheItem) =>
+        (result: QueryResult): Promise<CacheItem> => {
+            if (result.rowCount > 0 && item.data) {
+                return (
+                    Promise
+                        .map(result.rows, composition =>
+                            getFromPersistent('layer', composition.layer_id))
+                        .map(getFeatures(item.data))
+                        .then(() => updateRecord(item)));
+            }
+            return updateRecord(item);
+        };
 
 /**
  * load data from persistent storage and insert it in a kv store
  * @method load
  * @return {CacheItem} itself
  */
-const loadItem: (a: CacheItem) => Promise<void> =
+const loadItem: (a: CacheItem) => Promise<CacheItem> =
     (item) => {
         item.dirty = true;
 
         const getGroup = (group: ModelData) => {
+            logger(`getGroup ${JSON.stringify(group)}`)
             item.data = {
                 group: {
-                    layers: [],
                     ...group,
+                    layers: [],
                 },
             };
             return (
@@ -233,6 +237,7 @@ const loadItem: (a: CacheItem) => Promise<void> =
  */
 const getJSON: (a: CacheItem) => Promise<string> =
     (item) => {
+        logger(`getJSON ${item.id} ${item.dirty}`)
         return kvClient().get(item.id);
     };
 
@@ -258,10 +263,10 @@ const markClean: (a: CacheItem) => void =
 
 
 
-const itemLoader = (item: CacheItem) => {
+const itemLoader = (item: CacheItem): Promise<CacheItem> => {
     return (new Promise((resolve, reject) => {
         loadItem(item)
-            .then(() => { resolve(item); })
+            .then(resolve)
             .catch(reject);
     }));
 };
@@ -273,7 +278,7 @@ enum CacheStoreAction {
 }
 
 interface ICacheStore {
-    get(a: string): Promise<any>;
+    get(a: string): Promise<CacheItem>;
     update(a: RecordType, b: CacheStoreAction, c: ModelData): void;
 }
 
@@ -281,7 +286,7 @@ const CacheStore: () => ICacheStore =
     () => {
         const storedGroups = new Map<string, CacheItem>();
 
-        const get = (gid: string) => {
+        const get = (gid: string): Promise<CacheItem> => {
             logger(`CacheStore.get ${gid}`);
             let item = storedGroups.get(gid);
             if (item) {
@@ -512,6 +517,7 @@ const Cache: () => ICache =
             const resolver = (resolve: (a: string) => void, reject: RejectFn) => {
                 cacheStore
                     .get(gid)
+                    // .then((p) => { logger(`P ${p}`); return p })
                     .then(getJSON)
                     .then(resolve)
                     .catch(reject);
