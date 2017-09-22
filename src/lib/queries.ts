@@ -370,6 +370,16 @@ export default (prefix = '', schema = 'public'): IQueries => {
                 ST_Intersects(f.bbox, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))
             ORDER BY g.id;`,
         },
+        groupListFeaturesForGeometry: {
+            params: ['group_id', 'geojson'],
+            sql: `
+            SELECT  id
+            FROM  features
+            WHERE 
+                group_id = $1
+                AND 
+                ST_Intersects(bbox, ST_SetSRID(ST_GeomFromGeoJSON($2), 4326));`,
+        },
 
 
         // auth

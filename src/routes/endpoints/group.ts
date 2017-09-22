@@ -95,6 +95,27 @@ const handlers: HandlerSet = {
         );
     },
 
+    listFeaturesIntersects(request, response) {
+        DirectGeometryObjectIO.validate({ ...request.body }, [])
+            .fold(
+            () => { response.status(400).send(`invalid geometry`); },
+            geometry => persistentClient()
+                .query('groupListFeaturesForGeometry', [request.params.group_id, JSON.stringify(geometry)])
+                .then((result) => {
+                    if (result.rowCount > 0) {
+                        const data = result.rows.map(row => row.id);
+                        response.json(data);
+                    }
+                    else {
+                        response.json([]);
+                    }
+                })
+                .catch((err) => {
+                    response.status(404).send(err);
+                }),
+        );
+    },
+
     post(request, response) {
         const uid: string = request.user.id;
         const body = Object.assign({},
@@ -206,6 +227,13 @@ const endpoints: EndpointSet<typeof handlers> = [
         verb: 'post',
         handler: 'listIntersects',
         url: 'group/intersects/',
+        permissions: [],
+    },
+
+    {
+        verb: 'post',
+        handler: 'listFeaturesIntersects',
+        url: 'group/intersects/:group_id',
         permissions: [],
     },
 
